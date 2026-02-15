@@ -1,0 +1,101 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply m-0 p-0 box-border;
+  }
+
+  :root {
+    --bg-main: 2 6 23; /* slate-950 */
+    --bg-card: 15 23 42; /* slate-900 */
+    --bg-hover: 51 65 85; /* slate-700 */
+    --bg-secondary: 30 41 59; /* slate-800 */
+    --text-primary: 248 250 252; /* slate-50 */
+    --text-secondary: 148 163 184; /* slate-400 */
+    --text-muted: 100 116 139; /* slate-500 */
+    --border-default: 30 41 59; /* slate-800 */
+    --border-focus: 16 185 129; /* emerald-500 */
+    --accent-primary: 16 185 129; /* emerald-500 */
+    --accent-hover: 5 150 105; /* emerald-600 */
+    --accent-light: 52 211 153; /* emerald-400 */
+    --status-success: 16 185 129; /* emerald-500 */
+    --status-error: 239 68 68; /* red-500 */
+    --status-warning: 245 158 11; /* amber-500 */
+    --status-info: 59 130 246; /* blue-500 */
+  }
+
+  :root.light,
+  body.light {
+    --bg-main: 248 250 252; /* slate-50 */
+    --bg-card: 255 255 255; /* white */
+    --bg-hover: 241 245 249; /* slate-100 */
+    --bg-secondary: 241 245 249; /* slate-100 */
+    --text-primary: 15 23 42; /* slate-900 */
+    --text-secondary: 71 85 105; /* slate-600 */
+    --text-muted: 100 116 139; /* slate-500 */
+    --border-default: 226 232 240; /* slate-200 */
+    --border-focus: 16 185 129; /* emerald-500 */
+    --accent-primary: 16 185 129; /* emerald-500 */
+    --accent-hover: 5 150 105; /* emerald-600 */
+    --accent-light: 52 211 153; /* emerald-400 */
+    --status-success: 16 185 129; /* emerald-500 */
+    --status-error: 239 68 68; /* red-500 */
+    --status-warning: 245 158 11; /* amber-500 */
+    --status-info: 59 130 246; /* blue-500 */
+  }
+
+  body {
+    @apply font-sans antialiased bg-bg-main text-text-primary;
+    font-family:
+      "Inter",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      "Roboto",
+      sans-serif;
+    /* Responsive width for Side Panel */
+    width: 100%;
+    min-width: 320px;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  #root {
+    @apply w-full h-full flex flex-col;
+    overflow: hidden;
+  }
+
+  /* Custom Scrollbar - Emerald Dark Theme */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-bg-card;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-accent-primary rounded;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-accent-hover;
+  }
+}
+
+@layer components {
+  /* Glass effect utility */
+  .glass {
+    @apply bg-bg-card/60 backdrop-blur-glass border border-border-default shadow-glass;
+  }
+
+  .glass-lg {
+    @apply bg-bg-card/60 backdrop-blur-glass border border-border-default shadow-glass-lg;
+  }
+}

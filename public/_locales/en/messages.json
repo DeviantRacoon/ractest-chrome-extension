@@ -1,0 +1,11 @@
+{
+  "appName": {
+    "message": "RacTest"
+  },
+  "appDescription": {
+    "message": "Automate web testing by recording and replaying interactions."
+  },
+  "actionTitle": {
+    "message": "Open RacTest"
+  }
+}

@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RacTest - Demo Page</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 40px 20px;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 16px;
+        padding: 40px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      }
+
+      h1 {
+        color: #1a202c;
+        margin-bottom: 12px;
+        font-size: 32px;
+      }
+
+      .subtitle {
+        color: #718096;
+        margin-bottom: 32px;
+        font-size: 16px;
+      }
+
+      .form-group {
+        margin-bottom: 24px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: #2d3748;
+        font-weight: 600;
+        font-size: 14px;
+      }
+
+      input[type="text"],
+      input[type="email"],
+      input[type="password"],
+      select,
+      textarea {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 16px;
+        transition: all 0.3s ease;
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+
+      .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .checkbox-group input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+      }
+
+      .checkbox-group label {
+        margin: 0;
+        cursor: pointer;
+        font-weight: 400;
+      }
+
+      button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 14px 32px;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          transform 0.2s ease,
+          box-shadow 0.2s ease;
+        margin-right: 12px;
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      button.secondary {
+        background: #e2e8f0;
+        color: #2d3748;
+      }
+
+      button.secondary:hover {
+        background: #cbd5e0;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+      }
+
+      .card {
+        background: #f7fafc;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+      }
+
+      .card h2 {
+        color: #2d3748;
+        font-size: 20px;
+        margin-bottom: 16px;
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 4px 12px;
+        background: #10b981;
+        color: white;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-left: 8px;
+      }
+
+      .list {
+        list-style: none;
+      }
+
+      .list li {
+        padding: 12px;
+        border-bottom: 1px solid #e2e8f0;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+
+      .list li:hover {
+        background: #edf2f7;
+      }
+
+      .list li:last-child {
+        border-bottom: none;
+      }
+
+      .alert {
+        padding: 16px;
+        background: #e6fffa;
+        border-left: 4px solid #10b981;
+        border-radius: 4px;
+        margin-bottom: 24px;
+      }
+
+      .alert.warning {
+        background: #fffbeb;
+        border-left-color: #f59e0b;
+      }
+
+      .alert.error {
+        background: #fef2f2;
+        border-left-color: #ef4444;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>RacTest Demo Page <span class="badge">Testing</span></h1>
+      <p class="subtitle">
+        Esta página contiene varios elementos para probar el inspector de
+        RacTest
+      </p>
+
+      <div class="alert">
+        <strong>✅ Inspector Ready</strong> - Abre la extensión RacTest y activa
+        el modo inspector para comenzar a capturar elementos.
+      </div>
+
+      <div class="card">
+        <h2>Formulario de Registro</h2>
+        <form id="registrationForm">
+          <div class="form-group">
+            <label for="username">Nombre de usuario</label>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              data-testid="username-input"
+              placeholder="Ingresa tu nombre de usuario"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="email">Correo electrónico</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              data-testid="email-input"
+              placeholder="tu@email.com"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="password">Contraseña</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              data-testid="password-input"
+              placeholder="••••••••"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="country">País</label>
+            <select id="country" name="country" data-testid="country-select">
+              <option value="">Selecciona un país</option>
+              <option value="mx">México</option>
+              <option value="es">España</option>
+              <option value="ar">Argentina</option>
+              <option value="co">Colombia</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="bio">Biografía</label>
+            <textarea
+              id="bio"
+              name="bio"
+              rows="4"
+              data-testid="bio-textarea"
+              placeholder="Cuéntanos sobre ti..."
+            ></textarea>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <input
+              type="checkbox"
+              id="terms"
+              name="terms"
+              data-testid="terms-checkbox"
+            />
+            <label for="terms">Acepto los términos y condiciones</label>
+          </div>
+
+          <div class="form-group checkbox-group">
+            <input
+              type="checkbox"
+              id="newsletter"
+              name="newsletter"
+              data-testid="newsletter-checkbox"
+            />
+            <label for="newsletter">Quiero recibir el newsletter</label>
+          </div>
+
+          <button type="submit" data-testid="submit-button">Registrarse</button>
+          <button type="button" class="secondary" data-testid="cancel-button">
+            Cancelar
+          </button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Lista de Tareas</h2>
+        <ul class="list">
+          <li data-testid="task-1" aria-label="Primera tarea">
+            ✓ Configurar RacTest
+          </li>
+          <li data-testid="task-2" aria-label="Segunda tarea">
+            ☐ Crear primera flujo
+          </li>
+          <li data-testid="task-3" aria-label="Tercera tarea">
+            ☐ Probar el inspector
+          </li>
+          <li data-testid="task-4" aria-label="Cuarta tarea">
+            ☐ Ejecutar pruebas
+          </li>
+        </ul>
+      </div>
+
+      <div class="alert warning">
+        <strong>⚠️ Advertencia</strong> - Este elemento tiene un ID único y
+        debería ser fácil de capturar.
+      </div>
+
+      <div class="alert error" id="errorAlert">
+        <strong>❌ Error</strong> - Este elemento tiene un ID "errorAlert" que
+        se puede usar como selector.
+      </div>
+    </div>
+
+    <script>
+      // Simple form handler
+      document
+        .getElementById("registrationForm")
+        .addEventListener("submit", function (e) {
+          e.preventDefault();
+          alert("¡Formulario enviado! (En modo demo)");
+        });
+
+      // Log when clicked
+      document.querySelectorAll("[data-testid]").forEach((element) => {
+        element.addEventListener("click", function () {
+          console.log(
+            "Clicked element with testid:",
+            this.getAttribute("data-testid"),
+          );
+        });
+      });
+    </script>
+  </body>
+</html>
