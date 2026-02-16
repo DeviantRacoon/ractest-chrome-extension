@@ -12,6 +12,87 @@ import { injectErrorCapture } from "../../modules/monitoring/services/ErrorCaptu
 const inspector = new Inspector();
 let executionEngine: ExecutionEngine | null = null;
 
+function collectAutomationFeedback() {
+  const selectors = [
+    '[role="alert"]',
+    '[role="status"]',
+    '[aria-live]',
+    ".alert",
+    ".alert-danger",
+    ".toast",
+    ".notification",
+    ".error",
+    ".errors",
+    ".invalid-feedback",
+    '[class*="error"]',
+    '[class*="danger"]',
+    '[class*="invalid"]',
+  ].join(",");
+
+  const isVisible = (el: Element): boolean => {
+    const style = window.getComputedStyle(el as HTMLElement);
+    if (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      style.opacity === "0"
+    ) {
+      return false;
+    }
+    const rect = (el as HTMLElement).getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  };
+
+  const feedbackItems = Array.from(document.querySelectorAll(selectors))
+    .filter((el) => isVisible(el))
+    .slice(0, 60)
+    .map((el) => {
+      const htmlEl = el as HTMLElement;
+      const style = window.getComputedStyle(htmlEl);
+      const text = (htmlEl.innerText || htmlEl.textContent || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 280);
+      const className = String(htmlEl.className || "").slice(0, 200);
+      const role = String(htmlEl.getAttribute("role") || "");
+      const ariaLive = String(htmlEl.getAttribute("aria-live") || "");
+
+      return {
+        text,
+        className,
+        role,
+        ariaLive,
+        color: style.color || "",
+        backgroundColor: style.backgroundColor || "",
+        borderColor: style.borderColor || "",
+      };
+    })
+    .filter((item) => item.text || item.className || item.role);
+
+  const invalidFields = Array.from(
+    document.querySelectorAll(
+      'input:invalid, select:invalid, textarea:invalid, [aria-invalid="true"]',
+    ),
+  )
+    .filter((el) => isVisible(el))
+    .slice(0, 30)
+    .map((el) => {
+      const htmlEl = el as HTMLElement;
+      const label =
+        htmlEl.getAttribute("aria-label") ||
+        htmlEl.getAttribute("name") ||
+        htmlEl.getAttribute("id") ||
+        htmlEl.tagName.toLowerCase();
+      return String(label);
+    });
+
+  return {
+    url: location.href,
+    title: document.title,
+    feedbackItems,
+    invalidFields,
+  };
+}
+
 /**
  * Listen for messages from popup
  */
@@ -108,6 +189,10 @@ chrome.runtime.onMessage.addListener(
         );
         return true; // Async response
 
+      case "GET_AUTOMATION_FEEDBACK":
+        sendResponse({ success: true, feedback: collectAutomationFeedback() });
+        break;
+
       default:
         console.warn("[RacTest Content Script] Unknown message type:", message);
         sendResponse({ success: false, error: "Unknown message type" });
@@ -120,8 +205,10 @@ chrome.runtime.onMessage.addListener(
 // Log when content script is loaded
 console.log("[RacTest Content Script] Loaded and ready");
 
-// Inject passive error monitor
+// Inject passive error monitor via background (MAIN world, CSP-safe)
 injectErrorCapture();
+// Ensure full console interceptor is available for agent/autopilot context
+chrome.runtime.sendMessage({ type: "INJECT_LOGGER" }).catch(() => {});
 
 // Listen for messages from the injected monitor script
 window.addEventListener("message", (event) => {
@@ -136,6 +223,16 @@ window.addEventListener("message", (event) => {
       subtype,
       payload,
       timestamp,
+    });
+    return;
+  }
+
+  if (event.data?.source === "RACTEST_CONSOLE_LOG") {
+    chrome.runtime.sendMessage({
+      type: "CAPTURED_ERROR",
+      subtype: "CONSOLE",
+      payload: event.data.payload,
+      timestamp: Date.now(),
     });
   }
 });

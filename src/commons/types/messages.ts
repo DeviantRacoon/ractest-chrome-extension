@@ -43,6 +43,9 @@ export type PopupToContentMessage =
   | {
       type: "GET_DISTILLED_DOM";
       mode?: "fast" | "normal" | "complex";
+    }
+  | {
+      type: "GET_AUTOMATION_FEEDBACK";
     };
 
 /**

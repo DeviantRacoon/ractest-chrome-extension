@@ -5,7 +5,7 @@ import type {
   IInspector,
   ILLMProvider,
 } from "../domain/interfaces";
-import type { FakeDataType, TestStep } from "../../commons/types";
+import type { ConsoleLogEntry, FakeDataType, TestStep } from "../../commons/types";
 import { ReportGenerator } from "./ReportGenerator";
 
 export class AgentService implements IAgent {
@@ -73,6 +73,7 @@ export class AgentService implements IAgent {
     let fatalRuntimeError: string | null = null;
     const knownVisualErrors = new Set<string>();
     let lastExecutedWasCriticalCommit = false;
+    const capturedConsoleLogs: ConsoleLogEntry[] = [];
 
     // Subscribe to passive monitoring
     // Note: We need to handle cleanup of this subscription if possible,
@@ -80,8 +81,49 @@ export class AgentService implements IAgent {
     // Ideally inspector.onErrorCaptured should allow unsubscribing.
     // For this refactor, we leave it as is but note the architectural improvement needed.
     this.inspector.onErrorCaptured((error) => {
+      const subtype = String(error.subtype || "");
+      if (subtype === "CONSOLE" && error.payload && typeof error.payload === "object") {
+        const level = String((error.payload as any).level || "log").toLowerCase();
+        const message = String((error.payload as any).message || "");
+        const preview = `${level}: ${message}`.slice(0, 280);
+        const mappedLevel: ConsoleLogEntry["level"] =
+          level === "error" ||
+          level === "warn" ||
+          level === "info" ||
+          level === "debug" ||
+          level === "log"
+            ? level
+            : "log";
+        capturedConsoleLogs.push({
+          timestamp: Number((error.payload as any).timestamp || Date.now()),
+          level: mappedLevel,
+          message,
+          stack:
+            typeof (error.payload as any).stack === "string"
+              ? (error.payload as any).stack
+              : undefined,
+        });
+
+        if (level === "error") {
+          this.log("error", `🚨 Console Error: ${preview}`);
+          reportGen.addError("console", error.payload);
+          this.lastOutcome = "error_detected";
+        } else if (level === "warn") {
+          this.log("info", `⚠️ Console Warn: ${preview}`);
+          reportGen.addError("console", error.payload);
+        } else {
+          this.log("info", `🪵 Console ${level}: ${preview}`);
+        }
+        return;
+      }
+
       const preview = JSON.stringify(error.payload).substring(0, 200);
       this.log("error", `🚨 Page Error [${error.subtype}]: ${preview}`);
+      capturedConsoleLogs.push({
+        timestamp: Number(error.timestamp || Date.now()),
+        level: "error",
+        message: `[${subtype || "UNKNOWN"}] ${preview}`,
+      });
       reportGen.addError(
         error.subtype === "NETWORK" ? "network" : "console",
         error.payload,
@@ -121,6 +163,8 @@ export class AgentService implements IAgent {
     let currentElementMetaMap = new Map<number, { tag: string; raw: string }>();
     let unchangedCycles = 0;
     let lastVisualSignature = "";
+    let fillFirstStrategy = this.shouldUseFillFirstStrategy(goal);
+    let hasSubmittedCriticalAction = false;
 
     try {
       while (reportGen.getReport().stepsExecuted < MAX_STEPS) {
@@ -145,6 +189,13 @@ export class AgentService implements IAgent {
         const markedContext = await this.domMarker.getMarkedContext(profileId);
         currentMarkedContext = this.compactContext(markedContext, previousMarkedContext);
         currentElementMetaMap = this.extractElementMetaMap(markedContext);
+        const formProgress = this.getFormProgress(markedContext);
+        if (
+          formProgress.totalControls >= 4 &&
+          reportGen.getReport().stepsExecuted <= 1
+        ) {
+          fillFirstStrategy = true;
+        }
 
         const currentDomHash = this.computeHash(markedContext);
         const isDomUnchanged =
@@ -195,35 +246,43 @@ export class AgentService implements IAgent {
               visualDecision.verdict === "error" &&
               visualDecision.confidence >= 0.55
             ) {
-              this.lastOutcome = "error_detected";
-              const newVisualErrors = visualErrors.filter((err) => {
-                const normalized = err.trim();
-                if (!normalized) return false;
-                if (knownVisualErrors.has(normalized)) return false;
-                knownVisualErrors.add(normalized);
-                return true;
-              });
+              if (fillFirstStrategy && !hasSubmittedCriticalAction) {
+                this.log(
+                  "info",
+                  `⏭️ Fill-first active: postponing visual error evaluation until submit. (${visualDecision.confidence.toFixed(2)})`,
+                );
+                this.lastOutcome = isDomUnchanged ? "no_effect" : "progress";
+              } else {
+                this.lastOutcome = "error_detected";
+                const newVisualErrors = visualErrors.filter((err) => {
+                  const normalized = err.trim();
+                  if (!normalized) return false;
+                  if (knownVisualErrors.has(normalized)) return false;
+                  knownVisualErrors.add(normalized);
+                  return true;
+                });
 
-              if (newVisualErrors.length === 0) {
-                const aiError = `[AI_VISUAL] ${visualDecision.rationale}`;
-                if (!knownVisualErrors.has(aiError)) {
-                  knownVisualErrors.add(aiError);
-                  newVisualErrors.push(aiError);
+                if (newVisualErrors.length === 0) {
+                  const aiError = `[AI_VISUAL] ${visualDecision.rationale}`;
+                  if (!knownVisualErrors.has(aiError)) {
+                    knownVisualErrors.add(aiError);
+                    newVisualErrors.push(aiError);
+                  }
                 }
-              }
 
-              newVisualErrors.forEach((err) => {
-                this.log("error", `🚨 Visual Error Detected: ${err}`);
-                reportGen.addError("visual", err);
-              });
+                newVisualErrors.forEach((err) => {
+                  this.log("error", `🚨 Visual Error Detected: ${err}`);
+                  reportGen.addError("visual", err);
+                });
 
-              if (lastExecutedWasCriticalCommit) {
-                const stopReason =
-                  "Se detectó error visual tras acción crítica (submit/save).";
-                this.log("error", `❌ ${stopReason}`);
-                reportGen.addError("visual", stopReason);
-                reportGen.setStatus("FAILED");
-                break;
+                if (lastExecutedWasCriticalCommit) {
+                  const stopReason =
+                    "Se detectó error visual tras acción crítica (submit/save).";
+                  this.log("error", `❌ ${stopReason}`);
+                  reportGen.addError("visual", stopReason);
+                  reportGen.setStatus("FAILED");
+                  break;
+                }
               }
             } else if (visualDecision.verdict === "success") {
               this.log(
@@ -272,13 +331,16 @@ export class AgentService implements IAgent {
 
           const context = [
             `planner_mode=full_plan`,
+            `execution_strategy=${fillFirstStrategy && !hasSubmittedCriticalAction ? "fill_then_validate" : "balanced"}`,
+            `form_controls_total=${formProgress.totalControls}`,
+            `form_controls_filled=${formProgress.filledControls}`,
             `steps_executed=${reportGen.getReport().stepsExecuted}`,
             `last_outcome=${this.lastOutcome}`,
             `remaining_budget=${MAX_STEPS - reportGen.getReport().stepsExecuted}`,
           ].join("; ");
 
           const newPlan = await this.llmProvider.generateSteps(
-            `[FULL_PLAN] GOAL: ${goal}. Build an end-to-end executable map with ordered steps using provided IDs.`,
+            `${fillFirstStrategy ? "[FORM_FILL_FIRST] " : ""}[FULL_PLAN] GOAL: ${goal}. Build an end-to-end executable map with ordered steps using provided IDs.`,
             context,
             currentMarkedContext,
             previousSteps,
@@ -430,6 +492,9 @@ export class AgentService implements IAgent {
           }
 
           reportGen.addStep(nextStep);
+          if (lastExecutedWasCriticalCommit) {
+            hasSubmittedCriticalAction = true;
+          }
           stepResults.push({
             stepId: nextStep.id,
             status: "success",
@@ -488,7 +553,7 @@ export class AgentService implements IAgent {
       this.log("info", `📊 Report generated. Status: ${finalReport.status}`);
 
       // Save to History
-      await this.saveHistory(finalReport, stepResults);
+      await this.saveHistory(finalReport, stepResults, capturedConsoleLogs);
     }
   }
 
@@ -582,6 +647,40 @@ export class AgentService implements IAgent {
     return compacted.length > MAX_CHARS
       ? compacted.slice(0, MAX_CHARS) + "\n...[truncated]"
       : compacted;
+  }
+
+  private shouldUseFillFirstStrategy(goal: string): boolean {
+    return /(form|formulario|registro|register|signup|sign up|create user|crear usuario|fill|llenar)/i.test(
+      goal,
+    );
+  }
+
+  private getFormProgress(markedContext: string): {
+    totalControls: number;
+    filledControls: number;
+  } {
+    const lines = markedContext.split("\n");
+    let totalControls = 0;
+    let filledControls = 0;
+
+    for (const rawLine of lines) {
+      const line = rawLine.toLowerCase();
+      const isControl =
+        /<input|<textarea|<select/.test(line) ||
+        /(placeholder=|type=|name=)/.test(line);
+      if (!isControl) continue;
+      totalControls++;
+
+      const valueMatch = line.match(/value="([^"]*)"/);
+      const value = (valueMatch?.[1] || "").trim();
+      const selectSelectedMatch = line.match(/selected="([^"]*)"/);
+      const selected = (selectSelectedMatch?.[1] || "").trim();
+      if (value || selected) {
+        filledControls++;
+      }
+    }
+
+    return { totalControls, filledControls };
   }
 
   private extractNewErrorKeywords(
@@ -860,6 +959,7 @@ export class AgentService implements IAgent {
       timestamp: number;
       message?: string;
     }>,
+    consoleLogs: ConsoleLogEntry[] = [],
   ) {
     try {
       const historyEntry: any = {
@@ -886,6 +986,7 @@ export class AgentService implements IAgent {
           report.errors.console.length > 0 || report.errors.visual.length > 0
             ? [...report.errors.console, ...report.errors.visual].join("; ")
             : undefined,
+        consoleLogs,
       };
 
       const { storageService } = await import("../../commons/lib/storage");

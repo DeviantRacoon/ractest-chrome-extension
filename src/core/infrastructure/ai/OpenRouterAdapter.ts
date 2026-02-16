@@ -10,6 +10,7 @@ export class OpenRouterAdapter implements ILLMProvider {
     previousSteps: TestStep[] = [],
   ): Promise<TestStep[]> {
     const fullPlanMode = goal.includes("[FULL_PLAN]");
+    const fillFirstMode = goal.includes("[FORM_FILL_FIRST]");
 
     // Format history
     const history = previousSteps
@@ -70,6 +71,10 @@ export class OpenRouterAdapter implements ILLMProvider {
       - If visible errors/invalid state are present, prioritize ASSERT or FINISH.
       - For TYPE/SELECT actions, provide "value" unless useFakeData=true.
       - Keep focus on the immediate next executable step.
+      - If goal includes [FORM_FILL_FIRST]:
+        - Prioritize completing all likely form controls first (TYPE/SELECT/CHECK).
+        - Avoid submit/confirm/save clicks until fields are populated.
+        - Only validate errors after attempting submit or critical commit action.
     `;
 
     // 2. Construct User Prompt
@@ -92,7 +97,7 @@ export class OpenRouterAdapter implements ILLMProvider {
     );
 
     // 4. Parse and validate response
-    return this.parseResponse(response.content, fullPlanMode);
+    return this.parseResponse(response.content, fullPlanMode || fillFirstMode);
   }
 
   async evaluateOutcome(params: {
