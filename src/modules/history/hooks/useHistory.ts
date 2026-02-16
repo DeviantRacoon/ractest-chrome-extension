@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useI18n } from "../../../commons/i18n";
 import { useToast } from "../../../commons/components/ui";
 import storageService from "../../../commons/lib/storage";
 import type { RecipeExecutionResult } from "../../../commons/types";
 
 export const useHistory = () => {
+  const navigate = useNavigate();
   const [history, setHistory] = useState<RecipeExecutionResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [clearHistoryModalOpen, setClearHistoryModalOpen] = useState(false);
@@ -58,15 +60,8 @@ export const useHistory = () => {
     );
   };
 
-  const [selectedExecution, setSelectedExecution] =
-    useState<RecipeExecutionResult | null>(null);
-
-  const handleSelectExecution = (execution: RecipeExecutionResult) => {
-    setSelectedExecution(execution);
-  };
-
-  const handleCloseDetails = () => {
-    setSelectedExecution(null);
+  const handleOpenExecution = (executionId: string) => {
+    navigate(`/history/${executionId}`);
   };
 
   const formatDuration = (ms?: number) => {
@@ -87,8 +82,6 @@ export const useHistory = () => {
     handleConfirmClearHistory,
     formatDate,
     formatDuration,
-    selectedExecution,
-    handleSelectExecution,
-    handleCloseDetails,
+    handleOpenExecution,
   };
 };

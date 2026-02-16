@@ -124,8 +124,8 @@ export class OpenRouterAdapter implements ILLMProvider {
       .join("\n");
 
     const systemPrompt = `
-      You are RacTest QA Judge.
-      Decide if a web-test goal succeeded using evidence only.
+      You are RacTest, a deterministic web test result evaluator.
+      Evaluate if the automated test goal succeeded using evidence only.
 
       Return strict JSON:
       {
@@ -140,6 +140,7 @@ export class OpenRouterAdapter implements ILLMProvider {
       - If goal completion signals are strong and no error evidence exists, return "success".
       - If evidence conflicts or is weak, return "inconclusive".
       - Confidence must be 0..1.
+      - Do NOT provide QA commentary, advice, or explanations outside JSON.
       - Output JSON only.
     `;
 
@@ -225,7 +226,7 @@ export class OpenRouterAdapter implements ILLMProvider {
       .join("\n");
 
     const systemPrompt = `
-      You are a QA visual-feedback classifier.
+      You are RacTest visual state classifier for automated testing.
       Determine whether on-screen feedback represents ERROR, SUCCESS, WARNING, or NEUTRAL.
 
       Return strict JSON:
@@ -240,6 +241,7 @@ export class OpenRouterAdapter implements ILLMProvider {
       - Do not classify as error just because role="alert" exists.
       - If feedback explicitly indicates successful completion, prefer success.
       - Confidence must be 0..1.
+      - Do NOT provide QA commentary, advice, or explanations outside JSON.
       - Output JSON only.
     `;
 

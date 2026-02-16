@@ -736,11 +736,10 @@ export class AgentService implements IAgent {
       params.beforeContext,
       afterContext,
     );
-
-    return this.llmProvider.evaluateOutcome({
+    const finalEvalPayload = {
       goal: params.goal,
-      beforeContext: params.beforeContext,
-      afterContext,
+      beforeContextLength: params.beforeContext.length,
+      afterContextLength: afterContext.length,
       signals: {
         visualErrors:
           visualDecision.verdict === "error"
@@ -748,7 +747,28 @@ export class AgentService implements IAgent {
             : [],
         outcomeSignals,
         newErrorKeywords,
-        domChanged: this.computeHash(params.beforeContext) !== this.computeHash(afterContext),
+        domChanged:
+          this.computeHash(params.beforeContext) !== this.computeHash(afterContext),
+      },
+      executedSteps: params.executedSteps.map((s) => ({
+        action: s.action,
+        targetId: s.targetId,
+        selector: s.selector,
+      })),
+      beforePreview: params.beforeContext.slice(0, 1200),
+      afterPreview: afterContext.slice(0, 1200),
+    };
+    console.debug("[RacTest][Autopilot][AI Final Eval Payload]", finalEvalPayload);
+
+    return this.llmProvider.evaluateOutcome({
+      goal: params.goal,
+      beforeContext: params.beforeContext,
+      afterContext,
+      signals: {
+        visualErrors: finalEvalPayload.signals.visualErrors,
+        outcomeSignals: finalEvalPayload.signals.outcomeSignals,
+        newErrorKeywords: finalEvalPayload.signals.newErrorKeywords,
+        domChanged: finalEvalPayload.signals.domChanged,
       },
       executedSteps: params.executedSteps,
     });

@@ -9,7 +9,6 @@ import {
 import React from "react";
 import { useI18n } from "../../commons/i18n";
 import { Button, ConfirmationModal } from "../../commons/components/ui";
-import { HistoryDetailsModal } from "./components/HistoryDetailsModal";
 import type { useHistory } from "./hooks/useHistory";
 
 type HistoryViewProps = ReturnType<typeof useHistory>;
@@ -23,9 +22,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   handleConfirmClearHistory,
   formatDate,
   formatDuration,
-  selectedExecution,
-  handleSelectExecution,
-  handleCloseDetails,
+  handleOpenExecution,
 }) => {
   const { t } = useI18n();
   return (
@@ -84,7 +81,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             {history.map((item) => (
               <div
                 key={item.id}
-                onClick={() => handleSelectExecution(item)}
+                onClick={() => handleOpenExecution(item.id)}
                 className="group relative bg-bg-card/50 hover:bg-bg-card border border-border-default/50 hover:border-accent-primary/30 rounded-xl p-4 transition-all duration-200 cursor-pointer"
               >
                 <div className="flex items-start justify-between mb-2">
@@ -140,12 +137,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         onConfirm={handleConfirmClearHistory}
         onCancel={() => setClearHistoryModalOpen(false)}
         variant="danger"
-      />
-
-      <HistoryDetailsModal
-        isOpen={!!selectedExecution}
-        onClose={handleCloseDetails}
-        result={selectedExecution}
       />
     </div>
   );
