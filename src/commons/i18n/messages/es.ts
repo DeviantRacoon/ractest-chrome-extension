@@ -118,6 +118,7 @@ const es = {
   "autopilot.goalPlaceholder": "Ej: Navegar a la página de precios, buscar el plan Pro y verificar que cuesta $20...",
   "autopilot.run.needApiKey": "Configura tu API Key para iniciar",
   "autopilot.run.start": "Iniciar",
+  "autopilot.adaptiveMode.desc": "La lectura adaptativa es automática: Autopilot ajusta la profundidad según cambios del DOM y finaliza con una verificación QA final.",
   "autopilot.readingMode": "Modo de Lectura",
   "autopilot.readingMode.fast": "Rápido",
   "autopilot.readingMode.normal": "Normal",

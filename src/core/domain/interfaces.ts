@@ -52,6 +52,48 @@ export interface ILLMProvider {
     dom?: string,
     previousSteps?: TestStep[],
   ): Promise<TestStep[]>;
+
+  /**
+   * Evaluates final outcome using before/after context and deterministic signals.
+   */
+  evaluateOutcome(params: {
+    goal: string;
+    beforeContext: string;
+    afterContext: string;
+    signals: {
+      visualErrors: string[];
+      outcomeSignals: string[];
+      newErrorKeywords: string[];
+      domChanged: boolean;
+    };
+    executedSteps: TestStep[];
+  }): Promise<{
+    verdict: "success" | "failure" | "inconclusive";
+    confidence: number;
+    rationale: string;
+  }>;
+
+  /**
+   * Classifies visible alert/feedback UI using text + visual metadata.
+   */
+  classifyVisualState(params: {
+    goal: string;
+    signals: Array<{
+      text: string;
+      role: string;
+      className: string;
+      color: string;
+      backgroundColor: string;
+      borderColor: string;
+      ariaLive: string;
+      toneHint: "success" | "error" | "warning" | "info" | "neutral";
+    }>;
+    previousSteps: TestStep[];
+  }): Promise<{
+    verdict: "error" | "success" | "warning" | "neutral";
+    confidence: number;
+    rationale: string;
+  }>;
 }
 
 export interface IAgentLog {
@@ -128,6 +170,27 @@ export interface IDOMMarker {
    * detects visual errors on the page
    */
   detectVisualErrors(): Promise<string[]>;
+
+  /**
+   * Captures condensed outcome signals from the current page state.
+   */
+  getOutcomeSignals(): Promise<string[]>;
+
+  /**
+   * Returns structured visual feedback signals for AI classification.
+   */
+  getVisualSignals(): Promise<
+    Array<{
+      text: string;
+      role: string;
+      className: string;
+      color: string;
+      backgroundColor: string;
+      borderColor: string;
+      ariaLive: string;
+      toneHint: "success" | "error" | "warning" | "info" | "neutral";
+    }>
+  >;
 
   /**
    * Executes an action on a marked element

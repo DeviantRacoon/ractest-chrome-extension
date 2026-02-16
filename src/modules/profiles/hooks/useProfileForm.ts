@@ -22,6 +22,29 @@ export const useProfileForm = () => {
     }
   }, [profileId]);
 
+  // Prefill URL with active tab when creating a new profile
+  useEffect(() => {
+    if (profileId || url) return;
+    if (typeof chrome === "undefined" || !chrome.tabs?.query) return;
+
+    const prefillFromActiveTab = async () => {
+      try {
+        const [tab] = await chrome.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        const tabUrl = tab?.url || "";
+        if (/^https?:\/\//i.test(tabUrl)) {
+          setUrl(tabUrl);
+        }
+      } catch (error) {
+        console.error("Error prefilling current URL:", error);
+      }
+    };
+
+    prefillFromActiveTab();
+  }, [profileId, url]);
+
   const loadProfile = async (id: string) => {
     setLoading(true);
     try {

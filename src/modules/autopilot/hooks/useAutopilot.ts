@@ -10,24 +10,46 @@ export const useAutopilot = () => {
   const navigate = useNavigate();
   const { error } = useToast();
   const { t } = useI18n();
-  const [url, setUrl] = useState("https://google.com");
+  const [url, setUrl] = useState("");
   const [goal, setGoal] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   const [logs, setLogs] = useState<IAgentLog[]>([]);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
-  const [readingMode, setReadingMode] = useState<"fast" | "normal" | "complex">(
-    "normal",
-  );
 
   // Check for API Key on mount
   useEffect(() => {
     const checkApiKey = async () => {
       const settings = await storageService.getSettings();
       setHasApiKey(!!settings.openRouterApiKey);
-      // Load preference from settings (it might have been changed in global settings)
-      if (settings.readingMode) setReadingMode(settings.readingMode);
     };
     checkApiKey();
+  }, []);
+
+  // Prefill URL with the active tab when opening Autopilot
+  useEffect(() => {
+    const prefillFromActiveTab = async () => {
+      if (typeof chrome === "undefined" || !chrome.tabs?.query) {
+        setUrl("https://google.com");
+        return;
+      }
+
+      try {
+        const [tab] = await chrome.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        const tabUrl = tab?.url || "";
+        if (/^https?:\/\//i.test(tabUrl)) {
+          setUrl(tabUrl);
+        } else {
+          setUrl("https://google.com");
+        }
+      } catch {
+        setUrl("https://google.com");
+      }
+    };
+
+    prefillFromActiveTab();
   }, []);
 
   // Check initial state
@@ -140,11 +162,6 @@ export const useAutopilot = () => {
     }
   };
 
-  const updateReadingMode = (mode: "fast" | "normal" | "complex") => {
-    setReadingMode(mode);
-    storageService.updateSettings({ readingMode: mode });
-  };
-
   return {
     url,
     setUrl,
@@ -154,8 +171,6 @@ export const useAutopilot = () => {
     logs,
     setLogs, // Exposed for clearing logs
     hasApiKey,
-    readingMode,
-    setReadingMode: updateReadingMode, // Wrapped to update storage automatically
     handleRun,
     handleStop,
     handleGetCurrentUrl,

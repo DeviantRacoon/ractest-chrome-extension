@@ -118,6 +118,7 @@ const en = {
   "autopilot.goalPlaceholder": "E.g: Navigate to the pricing page, find the Pro plan and verify it costs $20...",
   "autopilot.run.needApiKey": "Set your API Key to start",
   "autopilot.run.start": "Start",
+  "autopilot.adaptiveMode.desc": "Adaptive reading is automatic: Autopilot switches analysis depth based on DOM changes and finishes with a final QA verification pass.",
   "autopilot.readingMode": "Reading Mode",
   "autopilot.readingMode.fast": "Fast",
   "autopilot.readingMode.normal": "Normal",

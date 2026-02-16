@@ -96,12 +96,10 @@ export class AgentService implements IAgent {
 
     this.log("info", `🚀 Agent started. Goal: "${goal}"`);
 
-    // Fetch configuration
+    // Fetch configuration (Autopilot now uses a single adaptive pipeline)
     const { storageService } = await import("../../commons/lib/storage");
     const settings = await storageService.getSettings();
     const MAX_STEPS = settings.agentMaxSteps || 20;
-    const READING_MODE = settings.readingMode || "normal";
-    const AGENT_MODE = settings.agentMode || "strict_fail_fast";
     const MAX_RETRIES_NON_CRITICAL =
       settings.maxRetriesNonCritical !== undefined
         ? Math.max(0, Math.min(3, settings.maxRetriesNonCritical))
@@ -119,7 +117,10 @@ export class AgentService implements IAgent {
     let previousContextLength = 0;
     let previousContextModalFlag = false;
     let currentMarkedContext = "";
+    let previousMarkedContext = "";
     let currentElementMetaMap = new Map<number, { tag: string; raw: string }>();
+    let unchangedCycles = 0;
+    let lastVisualSignature = "";
 
     try {
       while (reportGen.getReport().stepsExecuted < MAX_STEPS) {
@@ -135,16 +136,21 @@ export class AgentService implements IAgent {
         this.log("thinking", "⏳ Waiting for page stability...");
         await this.domMarker.waitForDOMStability(STABILITY_TIMEOUT);
         if (this.shouldStop(reportGen)) break;
-        this.log("thinking", `👀 Analyzing page (${READING_MODE} mode)...`);
-        await this.domMarker.markInteractiveElements(profileId, READING_MODE);
+        const adaptiveMode = this.pickAdaptiveReadMode(
+          unchangedCycles,
+          reportGen.getReport().stepsExecuted,
+        );
+        this.log("thinking", `👀 Analyzing page (${adaptiveMode} adaptive)...`);
+        await this.domMarker.markInteractiveElements(profileId, adaptiveMode);
         const markedContext = await this.domMarker.getMarkedContext(profileId);
-        currentMarkedContext = markedContext;
+        currentMarkedContext = this.compactContext(markedContext, previousMarkedContext);
         currentElementMetaMap = this.extractElementMetaMap(markedContext);
 
         const currentDomHash = this.computeHash(markedContext);
         const isDomUnchanged =
           currentDomHash === this.lastDomHash && this.lastDomHash !== "";
         this.lastDomHash = currentDomHash;
+        unchangedCycles = isDomUnchanged ? unchangedCycles + 1 : 0;
         const currentContextLength = markedContext.length;
         const currentModalFlag = this.hasModalSignals(markedContext);
 
@@ -157,47 +163,84 @@ export class AgentService implements IAgent {
           `🔍 Context size: ${markedContext.length} chars ${isDomUnchanged ? "(Unchanged)" : ""}`,
         );
 
+        const previousSteps = reportGen.getReport().steps;
+
         // 2.2 Check for Visual Errors
         const visualErrors = await this.domMarker.detectVisualErrors();
-        if (visualErrors.length > 0) {
-          this.lastOutcome = "error_detected";
-          const newVisualErrors = visualErrors.filter((err) => {
-            const normalized = err.trim();
-            if (!normalized) return false;
-            if (knownVisualErrors.has(normalized)) return false;
-            knownVisualErrors.add(normalized);
-            return true;
-          });
+        const visualSignals = await this.domMarker.getVisualSignals();
+        const hasVisualFeedback = visualErrors.length > 0 || visualSignals.length > 0;
+        if (hasVisualFeedback) {
+          const visualSignature = this.computeHash(
+            JSON.stringify({
+              visualErrors,
+              visualSignals: visualSignals.map((s) => ({
+                text: s.text,
+                role: s.role,
+                className: s.className,
+                toneHint: s.toneHint,
+              })),
+            }),
+          );
+          const visualChanged = visualSignature !== lastVisualSignature;
+          lastVisualSignature = visualSignature;
 
-          newVisualErrors.forEach((err) => {
-            this.log("error", `🚨 Visual Error Detected: ${err}`);
-            reportGen.addError("visual", err);
-          });
+          if (visualChanged) {
+            const visualDecision = await this.llmProvider.classifyVisualState({
+              goal,
+              signals: visualSignals,
+              previousSteps,
+            });
 
-          if (
-            newVisualErrors.length > 0 &&
-            reportGen.getReport().stepsExecuted > 0
-          ) {
-            const stopReason = lastExecutedWasCriticalCommit
-              ? "Se detectó error visual tras acción crítica (submit/save)."
-              : "Se detectó error visual durante la ejecución.";
             if (
-              lastExecutedWasCriticalCommit ||
-              AGENT_MODE === "strict_fail_fast"
+              visualDecision.verdict === "error" &&
+              visualDecision.confidence >= 0.55
             ) {
-              this.log("error", `❌ ${stopReason}`);
-              reportGen.addError("visual", stopReason);
-              reportGen.setStatus("FAILED");
-              break;
-            } else {
-              this.log("info", `⚠️ ${stopReason} (modo balanced)`);
+              this.lastOutcome = "error_detected";
+              const newVisualErrors = visualErrors.filter((err) => {
+                const normalized = err.trim();
+                if (!normalized) return false;
+                if (knownVisualErrors.has(normalized)) return false;
+                knownVisualErrors.add(normalized);
+                return true;
+              });
+
+              if (newVisualErrors.length === 0) {
+                const aiError = `[AI_VISUAL] ${visualDecision.rationale}`;
+                if (!knownVisualErrors.has(aiError)) {
+                  knownVisualErrors.add(aiError);
+                  newVisualErrors.push(aiError);
+                }
+              }
+
+              newVisualErrors.forEach((err) => {
+                this.log("error", `🚨 Visual Error Detected: ${err}`);
+                reportGen.addError("visual", err);
+              });
+
+              if (lastExecutedWasCriticalCommit) {
+                const stopReason =
+                  "Se detectó error visual tras acción crítica (submit/save).";
+                this.log("error", `❌ ${stopReason}`);
+                reportGen.addError("visual", stopReason);
+                reportGen.setStatus("FAILED");
+                break;
+              }
+            } else if (visualDecision.verdict === "success") {
+              this.log(
+                "info",
+                `✅ Visual feedback classified as success (${visualDecision.confidence.toFixed(2)}): ${visualDecision.rationale}`,
+              );
+            } else if (visualDecision.verdict === "warning") {
+              this.log(
+                "info",
+                `⚠️ Visual feedback warning (${visualDecision.confidence.toFixed(2)}): ${visualDecision.rationale}`,
+              );
             }
           }
         } else if (reportGen.getReport().stepsExecuted > 0) {
           this.lastOutcome = isDomUnchanged ? "no_effect" : "progress";
         }
 
-        const previousSteps = reportGen.getReport().steps;
         const nextPlannedStep = plannedSteps[plannedIndex];
         const requiresReplan =
           plannedSteps.length === 0 ||
@@ -261,8 +304,33 @@ export class AgentService implements IAgent {
         }
 
         if (nextStep.action === "FINISH") {
-          this.log("success", "✅ Agent finished (Goal Achieved).");
-          reportGen.setStatus("COMPLETED");
+          const verification = await this.verifyFinalOutcome({
+            goal,
+            profileId,
+            beforeContext: currentMarkedContext,
+            visualErrors,
+            executedSteps: previousSteps,
+          });
+          if (verification.verdict === "failure") {
+            this.log(
+              "error",
+              `❌ Final QA verdict: FAILURE (${verification.confidence.toFixed(2)}) - ${verification.rationale}`,
+            );
+            reportGen.addError("visual", verification.rationale);
+            reportGen.setStatus("FAILED");
+          } else if (verification.verdict === "inconclusive") {
+            this.log(
+              "info",
+              `⚠️ Final QA verdict: INCONCLUSIVE (${verification.confidence.toFixed(2)}) - ${verification.rationale}`,
+            );
+            reportGen.setStatus("FAILED");
+          } else {
+            this.log(
+              "success",
+              `✅ Final QA verdict: SUCCESS (${verification.confidence.toFixed(2)})`,
+            );
+            reportGen.setStatus("COMPLETED");
+          }
           break;
         }
 
@@ -328,6 +396,7 @@ export class AgentService implements IAgent {
           plannedIndex = Math.max(plannedIndex - 1, 0);
           previousContextLength = currentContextLength;
           previousContextModalFlag = currentModalFlag;
+          previousMarkedContext = markedContext;
           continue;
         } else {
           retryByStepKey.set(currentStepKey, 0);
@@ -388,6 +457,7 @@ export class AgentService implements IAgent {
 
         previousContextLength = currentContextLength;
         previousContextModalFlag = currentModalFlag;
+        previousMarkedContext = markedContext;
       }
 
       // Cleanup
@@ -482,6 +552,107 @@ export class AgentService implements IAgent {
       hash = hash | 0; // Convert to 32bit integer
     }
     return hash.toString();
+  }
+
+  private pickAdaptiveReadMode(
+    unchangedCycles: number,
+    stepsExecuted: number,
+  ): "fast" | "normal" | "complex" {
+    if (stepsExecuted === 0) return "normal";
+    if (unchangedCycles >= 2) return "complex";
+    if (unchangedCycles === 0 && stepsExecuted > 2) return "fast";
+    return "normal";
+  }
+
+  private compactContext(current: string, previous: string): string {
+    const MAX_LINES = 280;
+    const MAX_CHARS = 12000;
+
+    const currentLines = current.split("\n").filter((l) => l.trim().length > 0);
+    const previousSet = new Set(
+      previous
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean),
+    );
+
+    const changedLines = currentLines.filter((line) => !previousSet.has(line.trim()));
+    const prioritized = [...changedLines, ...currentLines].slice(0, MAX_LINES);
+    const compacted = prioritized.join("\n");
+    return compacted.length > MAX_CHARS
+      ? compacted.slice(0, MAX_CHARS) + "\n...[truncated]"
+      : compacted;
+  }
+
+  private extractNewErrorKeywords(
+    beforeContext: string,
+    afterContext: string,
+  ): string[] {
+    const keywordRegex =
+      /\b(error|failed|invalid|required|incorrect|denied|forbidden|rechazad|invalido|incorrecto|obligatorio|fallo)\b/gi;
+    const beforeMatches = new Set(
+      Array.from(beforeContext.matchAll(keywordRegex)).map((m) =>
+        (m[0] || "").toLowerCase(),
+      ),
+    );
+    const afterMatches = Array.from(afterContext.matchAll(keywordRegex)).map((m) =>
+      (m[0] || "").toLowerCase(),
+    );
+    const newKeywords = afterMatches.filter((k) => !beforeMatches.has(k));
+    return [...new Set(newKeywords)].slice(0, 20);
+  }
+
+  private async verifyFinalOutcome(params: {
+    goal: string;
+    profileId: string;
+    beforeContext: string;
+    visualErrors: string[];
+    executedSteps: TestStep[];
+  }): Promise<{
+    verdict: "success" | "failure" | "inconclusive";
+    confidence: number;
+    rationale: string;
+  }> {
+    this.log("thinking", "🧪 Running final QA verification...");
+    await this.domMarker.waitForDOMStability(1200);
+    await this.domMarker.markInteractiveElements(params.profileId, "complex");
+    const afterRawContext = await this.domMarker.getMarkedContext(params.profileId);
+    const afterContext = this.compactContext(afterRawContext, params.beforeContext);
+    const afterVisualErrors = await this.domMarker.detectVisualErrors();
+    const outcomeSignals = await this.domMarker.getOutcomeSignals();
+    const visualSignals = await this.domMarker.getVisualSignals();
+    const visualDecision = visualSignals.length
+      ? await this.llmProvider.classifyVisualState({
+          goal: params.goal,
+          signals: visualSignals,
+          previousSteps: params.executedSteps,
+        })
+      : { verdict: "neutral" as const, confidence: 0.5, rationale: "No visual signals." };
+
+    const newVisualErrors =
+      visualDecision.verdict === "error"
+        ? afterVisualErrors.filter((err) => !params.visualErrors.includes(err))
+        : [];
+    const newErrorKeywords = this.extractNewErrorKeywords(
+      params.beforeContext,
+      afterContext,
+    );
+
+    return this.llmProvider.evaluateOutcome({
+      goal: params.goal,
+      beforeContext: params.beforeContext,
+      afterContext,
+      signals: {
+        visualErrors:
+          visualDecision.verdict === "error"
+            ? [...newVisualErrors, `[AI_VISUAL] ${visualDecision.rationale}`]
+            : [],
+        outcomeSignals,
+        newErrorKeywords,
+        domChanged: this.computeHash(params.beforeContext) !== this.computeHash(afterContext),
+      },
+      executedSteps: params.executedSteps,
+    });
   }
 
   private extractElementMetaMap(
