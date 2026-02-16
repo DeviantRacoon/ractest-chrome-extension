@@ -1,6 +1,9 @@
 import type { TestStep } from "../../../commons/types";
 import type { ILLMProvider } from "../../../core/domain/interfaces";
-import { openRouterService } from "../../../modules/ai-assistant/services/openRouterService";
+
+const getOpenRouterService = async () =>
+  (await import("../../../modules/ai-assistant/services/openRouterService"))
+    .openRouterService;
 
 export class OpenRouterAdapter implements ILLMProvider {
   async generateSteps(
@@ -91,6 +94,7 @@ export class OpenRouterAdapter implements ILLMProvider {
     `;
 
     // 3. Call AI Service
+    const openRouterService = await getOpenRouterService();
     const response = await openRouterService.generateCompletion(
       systemPrompt,
       userPrompt,
@@ -160,6 +164,7 @@ export class OpenRouterAdapter implements ILLMProvider {
       ${params.afterContext || "N/A"}
     `;
 
+    const openRouterService = await getOpenRouterService();
     const response = await openRouterService.generateCompletion(
       systemPrompt,
       userPrompt,
@@ -255,6 +260,7 @@ export class OpenRouterAdapter implements ILLMProvider {
       ${JSON.stringify(params.signals.slice(0, 20), null, 2)}
     `;
 
+    const openRouterService = await getOpenRouterService();
     const response = await openRouterService.generateCompletion(
       systemPrompt,
       userPrompt,

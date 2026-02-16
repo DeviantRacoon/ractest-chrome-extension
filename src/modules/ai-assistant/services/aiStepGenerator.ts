@@ -1,6 +1,8 @@
 import { inspectorService } from "../../../commons/lib/inspectorService";
 import type { TestStep } from "../../../commons/types";
-import { openRouterService } from "./openRouterService";
+
+const getOpenRouterService = async () =>
+  (await import("./openRouterService")).openRouterService;
 
 export interface AIStepGenerationResult {
   steps: TestStep[];
@@ -73,6 +75,7 @@ export class AIStepGenerator {
     `;
 
     // 4. Call AI
+    const openRouterService = await getOpenRouterService();
     const response = await openRouterService.generateCompletion(
       systemPrompt,
       userPrompt,
