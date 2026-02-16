@@ -10,6 +10,7 @@ export class OpenRouterAdapter implements ILLMProvider {
     previousSteps: TestStep[] = [],
   ): Promise<TestStep[]> {
     const fullPlanMode = goal.includes("[FULL_PLAN]");
+    const fillFirstMode = goal.includes("[FORM_FILL_FIRST]");
 
     // Format history
     const history = previousSteps
@@ -70,6 +71,10 @@ export class OpenRouterAdapter implements ILLMProvider {
       - If visible errors/invalid state are present, prioritize ASSERT or FINISH.
       - For TYPE/SELECT actions, provide "value" unless useFakeData=true.
       - Keep focus on the immediate next executable step.
+      - If goal includes [FORM_FILL_FIRST]:
+        - Prioritize completing all likely form controls first (TYPE/SELECT/CHECK).
+        - Avoid submit/confirm/save clicks until fields are populated.
+        - Only validate errors after attempting submit or critical commit action.
     `;
 
     // 2. Construct User Prompt
@@ -92,7 +97,200 @@ export class OpenRouterAdapter implements ILLMProvider {
     );
 
     // 4. Parse and validate response
-    return this.parseResponse(response.content, fullPlanMode);
+    return this.parseResponse(response.content, fullPlanMode || fillFirstMode);
+  }
+
+  async evaluateOutcome(params: {
+    goal: string;
+    beforeContext: string;
+    afterContext: string;
+    signals: {
+      visualErrors: string[];
+      outcomeSignals: string[];
+      newErrorKeywords: string[];
+      domChanged: boolean;
+    };
+    executedSteps: TestStep[];
+  }): Promise<{
+    verdict: "success" | "failure" | "inconclusive";
+    confidence: number;
+    rationale: string;
+  }> {
+    const history = params.executedSteps
+      .map(
+        (s, i) =>
+          `${i + 1}. [${s.action}] ${s.selector} (ID: ${s.targetId}) value: ${s.value || "N/A"}`,
+      )
+      .join("\n");
+
+    const systemPrompt = `
+      You are RacTest QA Judge.
+      Decide if a web-test goal succeeded using evidence only.
+
+      Return strict JSON:
+      {
+        "verdict": "success" | "failure" | "inconclusive",
+        "confidence": number,
+        "rationale": "short evidence-based reason"
+      }
+
+      Rules:
+      - Use only the provided contexts and signals.
+      - If explicit error evidence exists (alerts, aria-invalid, visual errors), prefer "failure".
+      - If goal completion signals are strong and no error evidence exists, return "success".
+      - If evidence conflicts or is weak, return "inconclusive".
+      - Confidence must be 0..1.
+      - Output JSON only.
+    `;
+
+    const userPrompt = `
+      Goal: "${params.goal}"
+
+      Executed steps:
+      ${history || "No executed steps"}
+
+      Signals:
+      ${JSON.stringify(params.signals, null, 2)}
+
+      Before context:
+      ${params.beforeContext || "N/A"}
+
+      After context:
+      ${params.afterContext || "N/A"}
+    `;
+
+    const response = await openRouterService.generateCompletion(
+      systemPrompt,
+      userPrompt,
+    );
+
+    try {
+      const clean = response.content
+        .replace(/<think>[\s\S]*?<\/think>/g, "")
+        .trim();
+      const jsonMatch =
+        clean.match(/```json\n([\s\S]*?)\n```/) ||
+        clean.match(/```([\s\S]*?)```/) ||
+        clean.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(jsonMatch?.[1] || jsonMatch?.[0] || clean);
+      const verdict =
+        parsed?.verdict === "success" ||
+        parsed?.verdict === "failure" ||
+        parsed?.verdict === "inconclusive"
+          ? parsed.verdict
+          : "inconclusive";
+      const confidenceRaw = Number(parsed?.confidence);
+      const confidence = Number.isFinite(confidenceRaw)
+        ? Math.max(0, Math.min(1, confidenceRaw))
+        : 0.4;
+      const rationale =
+        typeof parsed?.rationale === "string" && parsed.rationale.trim()
+          ? parsed.rationale.trim().slice(0, 260)
+          : "Outcome evaluator returned insufficient rationale.";
+
+      return { verdict, confidence, rationale };
+    } catch {
+      return {
+        verdict: "inconclusive",
+        confidence: 0.25,
+        rationale: "Could not parse outcome-evaluation response.",
+      };
+    }
+  }
+
+  async classifyVisualState(params: {
+    goal: string;
+    signals: Array<{
+      text: string;
+      role: string;
+      className: string;
+      color: string;
+      backgroundColor: string;
+      borderColor: string;
+      ariaLive: string;
+      toneHint: "success" | "error" | "warning" | "info" | "neutral";
+    }>;
+    previousSteps: TestStep[];
+  }): Promise<{
+    verdict: "error" | "success" | "warning" | "neutral";
+    confidence: number;
+    rationale: string;
+  }> {
+    const history = params.previousSteps
+      .slice(-8)
+      .map(
+        (s, i) =>
+          `${i + 1}. [${s.action}] ${s.selector} (ID: ${s.targetId}) value: ${s.value || "N/A"}`,
+      )
+      .join("\n");
+
+    const systemPrompt = `
+      You are a QA visual-feedback classifier.
+      Determine whether on-screen feedback represents ERROR, SUCCESS, WARNING, or NEUTRAL.
+
+      Return strict JSON:
+      {
+        "verdict": "error" | "success" | "warning" | "neutral",
+        "confidence": number,
+        "rationale": "short evidence-based reason"
+      }
+
+      Rules:
+      - Use text + role + class + color/background metadata together.
+      - Do not classify as error just because role="alert" exists.
+      - If feedback explicitly indicates successful completion, prefer success.
+      - Confidence must be 0..1.
+      - Output JSON only.
+    `;
+
+    const userPrompt = `
+      Goal: "${params.goal}"
+
+      Recent executed steps:
+      ${history || "No steps"}
+
+      Visual signals:
+      ${JSON.stringify(params.signals.slice(0, 20), null, 2)}
+    `;
+
+    const response = await openRouterService.generateCompletion(
+      systemPrompt,
+      userPrompt,
+    );
+
+    try {
+      const clean = response.content
+        .replace(/<think>[\s\S]*?<\/think>/g, "")
+        .trim();
+      const jsonMatch =
+        clean.match(/```json\n([\s\S]*?)\n```/) ||
+        clean.match(/```([\s\S]*?)```/) ||
+        clean.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(jsonMatch?.[1] || jsonMatch?.[0] || clean);
+      const verdict =
+        parsed?.verdict === "error" ||
+        parsed?.verdict === "success" ||
+        parsed?.verdict === "warning" ||
+        parsed?.verdict === "neutral"
+          ? parsed.verdict
+          : "neutral";
+      const confidenceRaw = Number(parsed?.confidence);
+      const confidence = Number.isFinite(confidenceRaw)
+        ? Math.max(0, Math.min(1, confidenceRaw))
+        : 0.45;
+      const rationale =
+        typeof parsed?.rationale === "string" && parsed.rationale.trim()
+          ? parsed.rationale.trim().slice(0, 220)
+          : "No rationale provided by visual classifier.";
+
+      return { verdict, confidence, rationale };
+    } catch {
+      return {
+        verdict: "neutral",
+        confidence: 0.25,
+        rationale: "Could not parse visual-state classification response.",
+      };
+    }
   }
 
   private parseResponse(content: string, fullPlanMode: boolean): TestStep[] {

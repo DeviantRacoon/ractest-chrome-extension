@@ -30,6 +30,9 @@ export class ExecutionService {
   private executionStartTime = 0;
   private pendingFailureSignals: FailureSignal[] = [];
 
+  private static readonly FAILURE_KEYWORDS =
+    /(failed|error|invalid|required|unable|degraded|rechazad|fall[óo]|inv[aá]lid|obligatorio)/i;
+
   constructor() {
     // Listen for messages from content script
     if (typeof chrome !== "undefined" && chrome.runtime) {
@@ -76,12 +79,39 @@ export class ExecutionService {
                 timestamp: message.timestamp || Date.now(),
                 payload: message.payload,
               };
-
-              this.executionLogs.push({
-                timestamp: signal.timestamp,
-                level: "error",
-                message: `[${signal.subtype}] ${signal.message}`,
-              });
+              if (
+                subtype === "CONSOLE" &&
+                message.payload &&
+                typeof message.payload === "object"
+              ) {
+                const payload = message.payload as {
+                  timestamp?: number;
+                  level?: string;
+                  message?: string;
+                  stack?: string;
+                };
+                const level = String(payload.level || "log").toLowerCase();
+                const mappedLevel: import("../types").ConsoleLogEntry["level"] =
+                  level === "error" ||
+                  level === "warn" ||
+                  level === "info" ||
+                  level === "debug" ||
+                  level === "log"
+                    ? level
+                    : "log";
+                this.executionLogs.push({
+                  timestamp: Number(payload.timestamp || signal.timestamp),
+                  level: mappedLevel,
+                  message: String(payload.message || signal.message),
+                  stack: payload.stack,
+                });
+              } else {
+                this.executionLogs.push({
+                  timestamp: signal.timestamp,
+                  level: "error",
+                  message: `[${signal.subtype}] ${signal.message}`,
+                });
+              }
 
               if (this.isHardFailureSignal(signal)) {
                 this.pendingFailureSignals.push(signal);
@@ -269,6 +299,37 @@ export class ExecutionService {
       }
 
       // Execution Complete
+      const finalOutcome = await this.evaluateFinalOutcomeWithAI(
+        recipe,
+        results,
+        this.currentTabId,
+      );
+      if (finalOutcome.verdict === "failure") {
+        const errorMessage = `Fallo detectado automáticamente (AI_FINAL): ${finalOutcome.rationale}`;
+        const failureStepResult: StepExecutionResult = {
+          stepId: `ai-final-${Date.now()}`,
+          status: "error",
+          message: errorMessage,
+          error: errorMessage,
+          timestamp: Date.now(),
+        };
+        results.push(failureStepResult);
+        this.onStepResultCallback?.(failureStepResult);
+        await this.saveHistory(recipe, "failed", results, errorMessage, {
+          subtype: "FORM_VALIDATION",
+          message: finalOutcome.rationale,
+          timestamp: Date.now(),
+          payload: finalOutcome,
+        });
+        this.onFailedCallback?.(errorMessage, results);
+        this.sendNotification(
+          "Error en el flujo",
+          "La validación final detectó que el formulario terminó en estado de fallo.",
+        );
+        this.resetExecutionState();
+        return;
+      }
+
       await this.saveHistory(recipe, "completed", results);
       this.onCompleteCallback?.(results);
       this.resetExecutionState();
@@ -668,6 +729,145 @@ export class ExecutionService {
     this.isExecuting = false;
     this.pendingFailureSignals = [];
     this.currentTabId = null;
+  }
+
+  private async getAutomationFeedbackOnContent(tabId: number): Promise<{
+    url: string;
+    title: string;
+    feedbackItems: Array<{
+      text: string;
+      className: string;
+      role: string;
+      ariaLive: string;
+      color: string;
+      backgroundColor: string;
+      borderColor: string;
+    }>;
+    invalidFields: string[];
+  } | null> {
+    return await new Promise((resolve) => {
+      chrome.tabs.sendMessage(tabId, { type: "GET_AUTOMATION_FEEDBACK" }, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
+        if (response?.success && response.feedback) {
+          resolve(response.feedback);
+          return;
+        }
+        resolve(null);
+      });
+    });
+  }
+
+  private async evaluateFinalOutcomeWithAI(
+    recipe: TestProfile,
+    results: StepExecutionResult[],
+    tabId: number | null,
+  ): Promise<{ verdict: "success" | "failure" | "inconclusive"; rationale: string }> {
+    if (!tabId) {
+      return { verdict: "inconclusive", rationale: "No active tab for final evaluation." };
+    }
+
+    const feedback = await this.getAutomationFeedbackOnContent(tabId);
+    if (!feedback) {
+      return { verdict: "inconclusive", rationale: "No feedback collected from content script." };
+    }
+
+    const deterministicFailure = feedback.feedbackItems.some((item) =>
+      ExecutionService.FAILURE_KEYWORDS.test(
+        `${item.text} ${item.className} ${item.role} ${item.ariaLive}`,
+      ),
+    );
+    if (deterministicFailure || feedback.invalidFields.length > 0) {
+      return {
+        verdict: "failure",
+        rationale:
+          feedback.feedbackItems.find((f) =>
+            ExecutionService.FAILURE_KEYWORDS.test(
+              `${f.text} ${f.className} ${f.role} ${f.ariaLive}`,
+            ),
+          )?.text ||
+          `Detected invalid fields (${feedback.invalidFields.length}) after completion.`,
+      };
+    }
+
+    try {
+      const [{ openRouterService }, { storageService }] = await Promise.all([
+        import("../../modules/ai-assistant/services/openRouterService"),
+        import("./storage"),
+      ]);
+      const settings = await storageService.getSettings();
+      if (!settings.openRouterApiKey) {
+        return { verdict: "inconclusive", rationale: "No API key configured for AI final check." };
+      }
+
+      const systemPrompt = `
+        You are RacTest final QA validator.
+        Determine if this automated form run ended in success, failure, or inconclusive.
+        Use all evidence: visible feedback texts, classes, roles, aria-live, colors, invalid fields, and executed steps.
+
+        Return strict JSON:
+        {
+          "verdict": "success" | "failure" | "inconclusive",
+          "rationale": "short evidence-based explanation"
+        }
+
+        Rules:
+        - If visible feedback indicates signup/register/create failed, return failure.
+        - Do not infer success only because steps executed.
+        - If evidence is weak/conflicting, return inconclusive.
+        - Output JSON only.
+      `;
+
+      const userPrompt = `
+        Recipe: ${recipe.name}
+        Recipe URL: ${recipe.url}
+        Current URL: ${feedback.url}
+        Title: ${feedback.title}
+
+        Step results:
+        ${results
+          .map((r, i) => `${i + 1}. ${r.status} - ${r.message || ""}`)
+          .join("\n")}
+
+        Invalid fields:
+        ${feedback.invalidFields.join(", ") || "none"}
+
+        Visual feedback items:
+        ${JSON.stringify(feedback.feedbackItems.slice(0, 20), null, 2)}
+      `;
+
+      const response = await openRouterService.generateCompletion(
+        systemPrompt,
+        userPrompt,
+      );
+
+      const clean = response.content
+        .replace(/<think>[\s\S]*?<\/think>/g, "")
+        .trim();
+      const jsonMatch =
+        clean.match(/```json\n([\s\S]*?)\n```/) ||
+        clean.match(/```([\s\S]*?)```/) ||
+        clean.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(jsonMatch?.[1] || jsonMatch?.[0] || clean);
+      const verdict =
+        parsed?.verdict === "success" ||
+        parsed?.verdict === "failure" ||
+        parsed?.verdict === "inconclusive"
+          ? parsed.verdict
+          : "inconclusive";
+      const rationale =
+        typeof parsed?.rationale === "string" && parsed.rationale.trim()
+          ? parsed.rationale.trim().slice(0, 300)
+          : "AI returned no rationale.";
+      return { verdict, rationale };
+    } catch (error) {
+      return {
+        verdict: "inconclusive",
+        rationale: `AI final check failed: ${String(error)}`,
+      };
+    }
   }
 }
 

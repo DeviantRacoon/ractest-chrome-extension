@@ -330,6 +330,142 @@
     return [...new Set(errors)];
   };
 
+  window.RAC_SOM.getOutcomeSignals = function () {
+    const signals = [];
+    const pushSignal = (prefix, value) => {
+      const safe = String(value || "")
+        .replace(/[\n\r]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!safe) return;
+      signals.push(`${prefix} ${safe}`.slice(0, 180));
+    };
+
+    // Strong accessibility/state indicators
+    const invalidNodes = document.querySelectorAll(
+      '[aria-invalid="true"], [aria-live="assertive"]',
+    );
+    invalidNodes.forEach((el) => {
+      if (el.offsetParent === null) return;
+      pushSignal("[ARIA_INVALID]", el.innerText || el.getAttribute("aria-label"));
+    });
+
+    // Explicit error role
+    document.querySelectorAll('[role="alert"]').forEach((el) => {
+      if (el.offsetParent === null) return;
+      pushSignal("[ROLE_ALERT]", el.innerText);
+    });
+
+    // Error keywords in visible small blocks
+    const keywordRegex =
+      /(error|failed|invalid|required|incorrect|denied|forbidden|rechazad|invalido|incorrecto|obligatorio|fallo)/i;
+    const blocks = Array.from(
+      document.querySelectorAll("p, span, div, li, small, strong"),
+    ).slice(0, 400);
+    blocks.forEach((el) => {
+      if (el.offsetParent === null) return;
+      const text = (el.innerText || "").trim();
+      if (!text || text.length < 3 || text.length > 140) return;
+      if (keywordRegex.test(text)) {
+        pushSignal("[KEYWORD]", text);
+      }
+    });
+
+    // Red-like styles as weak signal (never deterministic by itself)
+    const redNodes = Array.from(
+      document.querySelectorAll(
+        '[class*="error"], [class*="danger"], [class*="invalid"]',
+      ),
+    ).slice(0, 120);
+    redNodes.forEach((el) => {
+      if (el.offsetParent === null) return;
+      const style = window.getComputedStyle(el);
+      const color = `${style.color || ""} ${style.backgroundColor || ""}`;
+      if (/rgb\((1[5-9]\d|2[0-5]\d),\s?\d{1,3},\s?\d{1,3}\)/.test(color)) {
+        pushSignal("[RED_HINT]", el.innerText || el.getAttribute("class"));
+      }
+    });
+
+    return [...new Set(signals)].slice(0, 50);
+  };
+
+  window.RAC_SOM.getVisualSignals = function () {
+    const selectors = [
+      '[role="alert"]',
+      '[role="status"]',
+      '[aria-live]',
+      ".alert",
+      ".toast",
+      ".notification",
+      ".error",
+      ".success",
+      ".warning",
+    ];
+
+    const nodes = Array.from(document.querySelectorAll(selectors.join(","))).slice(
+      0,
+      80,
+    );
+
+    const inferToneHint = (el, text, cls) => {
+      const combined = `${text} ${cls}`.toLowerCase();
+      if (
+        /(success|successful|saved|created|welcome|done|completed|exito|exitos|guardad|completad)/.test(
+          combined,
+        )
+      ) {
+        return "success";
+      }
+      if (
+        /(error|failed|invalid|required|denied|forbidden|fallo|invalido|incorrecto|rechazad)/.test(
+          combined,
+        )
+      ) {
+        return "error";
+      }
+      if (/(warn|warning|caution|precaucion|advertencia)/.test(combined)) {
+        return "warning";
+      }
+      if (/(info|notice|informacion|aviso)/.test(combined)) {
+        return "info";
+      }
+      return "neutral";
+    };
+
+    const toSignal = (el) => {
+      if (el.offsetParent === null) return null;
+      const style = window.getComputedStyle(el);
+      const text = (el.innerText || el.textContent || "")
+        .replace(/[\n\r]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 220);
+      const className = String(el.className || "").slice(0, 180);
+      const role = String(el.getAttribute("role") || "");
+      const ariaLive = String(el.getAttribute("aria-live") || "");
+      if (!text && !className && !role) return null;
+      return {
+        text,
+        role,
+        className,
+        color: style.color || "",
+        backgroundColor: style.backgroundColor || "",
+        borderColor: style.borderColor || "",
+        ariaLive,
+        toneHint: inferToneHint(el, text, className),
+      };
+    };
+
+    const signals = nodes.map(toSignal).filter(Boolean);
+    const dedup = new Map();
+    signals.forEach((s) => {
+      const key = `${s.role}|${s.className}|${s.text}`;
+      if (!dedup.has(key)) dedup.set(key, s);
+    });
+
+    return Array.from(dedup.values()).slice(0, 30);
+  };
+
   window.RAC_SOM.unmarkElements = function () {
     const badges = document.querySelectorAll(`.${BADGE_CLASS}`);
     badges.forEach((b) => b.remove());
