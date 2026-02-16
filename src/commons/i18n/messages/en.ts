@@ -30,6 +30,11 @@ const en = {
   "settings.apiKey.helper":
     "Required to use AI features. (Must start with 'sk-or-')",
   "settings.apiKey.error": "Invalid API Key format",
+  "settings.aiTesting.label": "Use AI in tests",
+  "settings.aiTesting.enabled": "Enabled",
+  "settings.aiTesting.disabled": "Disabled",
+  "settings.aiTesting.helper":
+    "When disabled, test validation runs deterministic-only and skips AI calls.",
 
   "settings.aiModel": "AI Model",
   "settings.aiModel.placeholder": "e.g: anthropic/claude-3-5-sonnet",

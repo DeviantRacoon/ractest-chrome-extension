@@ -28,6 +28,10 @@ const es = {
   "settings.apiKey.label": "OpenRouter API Key",
   "settings.apiKey.helper": "Necesaria para usar las funciones de IA. (Debe empezar con 'sk-or-')",
   "settings.apiKey.error": "Formato de API Key inválido",
+  "settings.aiTesting.label": "Usar IA en tests",
+  "settings.aiTesting.enabled": "Activado",
+  "settings.aiTesting.disabled": "Desactivado",
+  "settings.aiTesting.helper": "Al desactivarlo, la validación del test usa solo reglas determinísticas y omite llamadas a IA.",
 
   "settings.aiModel": "Modelo IA",
   "settings.aiModel.placeholder": "ej: anthropic/claude-3-5-sonnet",
