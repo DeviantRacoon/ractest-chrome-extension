@@ -803,8 +803,8 @@ export class ExecutionService {
       }
 
       const systemPrompt = `
-        You are RacTest final QA validator.
-        Determine if this automated form run ended in success, failure, or inconclusive.
+        You are RacTest final test outcome validator.
+        Determine if this automated test run ended in success, failure, or inconclusive.
         Use all evidence: visible feedback texts, classes, roles, aria-live, colors, invalid fields, and executed steps.
 
         Return strict JSON:
@@ -817,6 +817,7 @@ export class ExecutionService {
         - If visible feedback indicates signup/register/create failed, return failure.
         - Do not infer success only because steps executed.
         - If evidence is weak/conflicting, return inconclusive.
+        - Do NOT provide QA commentary, advice, or explanations outside JSON.
         - Output JSON only.
       `;
 
@@ -837,6 +838,20 @@ export class ExecutionService {
         Visual feedback items:
         ${JSON.stringify(feedback.feedbackItems.slice(0, 20), null, 2)}
       `;
+      console.debug("[RacTest][Execution][AI Final Eval Payload]", {
+        recipe: recipe.name,
+        recipeUrl: recipe.url,
+        currentUrl: feedback.url,
+        title: feedback.title,
+        stepResults: results.map((r) => ({
+          stepId: r.stepId,
+          status: r.status,
+          message: r.message,
+        })),
+        invalidFields: feedback.invalidFields,
+        feedbackItems: feedback.feedbackItems.slice(0, 20),
+        userPromptPreview: userPrompt.slice(0, 1800),
+      });
 
       const response = await openRouterService.generateCompletion(
         systemPrompt,

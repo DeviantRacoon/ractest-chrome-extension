@@ -21,12 +21,14 @@ const en = {
   "settings.language": "Language",
   "settings.language.auto": "Automatic (System)",
   "settings.language.system": "System language: {{language}}",
-  "settings.language.helper": "English is the default language. Choose Automatic to follow your browser/system language.",
+  "settings.language.helper":
+    "English is the default language. Choose Automatic to follow your browser/system language.",
   "settings.language.es": "Spanish",
   "settings.language.en": "English",
 
   "settings.apiKey.label": "OpenRouter API Key",
-  "settings.apiKey.helper": "Required to use AI features. (Must start with 'sk-or-')",
+  "settings.apiKey.helper":
+    "Required to use AI features. (Must start with 'sk-or-')",
   "settings.apiKey.error": "Invalid API Key format",
 
   "settings.aiModel": "AI Model",
@@ -45,10 +47,12 @@ const en = {
   "settings.agentMode": "Agent Execution Mode",
   "settings.agentMode.strict": "Strict (Fail-Fast)",
   "settings.agentMode.balanced": "Balanced",
-  "settings.agentMode.help": "Strict stops on visual/runtime errors. Balanced allows limited recovery on non-critical steps.",
+  "settings.agentMode.help":
+    "Strict stops on visual/runtime errors. Balanced allows limited recovery on non-critical steps.",
 
   "settings.note.title": "Note:",
-  "settings.note.body": "Step limit prevents the agent from entering infinite loops or consuming too many resources. Default is 20. For reliable testing flows use strict mode and non-critical retries at 0.",
+  "settings.note.body":
+    "Step limit prevents the agent from entering infinite loops or consuming too many resources. Default is 20. For reliable testing flows use strict mode and non-critical retries at 0.",
 
   "settings.highlightColor": "Highlight Color",
 
@@ -58,7 +62,8 @@ const en = {
   "settings.resetAll.desc": "Delete flows, history, and settings",
 
   "settings.confirmReset.title": "Reset Everything",
-  "settings.confirmReset.message": "Are you sure you want to delete ALL your flows, history, and settings? This action cannot be undone and you will lose all your data.",
+  "settings.confirmReset.message":
+    "Are you sure you want to delete ALL your flows, history, and settings? This action cannot be undone and you will lose all your data.",
   "settings.confirmReset.confirm": "Delete Everything",
   "settings.confirmReset.cancel": "Cancel",
 
@@ -66,7 +71,8 @@ const en = {
 
   "about.version": "Version {{version}}",
   "about.section.about": "About RacTest",
-  "about.description": "Extension to create and run web tests with a local-first approach and AI assistance.",
+  "about.description":
+    "Extension to create and run web tests with a local-first approach and AI assistance.",
   "about.section.privacy": "Privacy and Security",
   "about.privacy.item1": "Data, history, and settings are stored locally.",
   "about.privacy.item2": "No own servers and no browsing tracking.",
@@ -90,7 +96,8 @@ const en = {
   "recipes.empty.createFirst": "Create your first flow to start automating",
   "recipes.empty.createButton": "Create flow",
   "recipes.delete.title": "Delete Flow",
-  "recipes.delete.message": "Are you sure you want to delete this flow? This action cannot be undone.",
+  "recipes.delete.message":
+    "Are you sure you want to delete this flow? This action cannot be undone.",
   "recipes.delete.confirm": "Delete",
   "recipes.delete.cancel": "Cancel",
   "recipes.untitled": "Untitled flow",
@@ -107,7 +114,8 @@ const en = {
   "autopilot.apiKey.settings": "Settings",
   "autopilot.apiKey.toConfigure": "to configure it.",
   "autopilot.helper.title": "How does it work?",
-  "autopilot.helper.body": "Autopilot analyzes the web page, identifies interactive elements, and makes decisions based on your goal using advanced AI.",
+  "autopilot.helper.body":
+    "Autopilot analyzes the web page, identifies interactive elements, and makes decisions based on your goal using advanced AI.",
   "autopilot.live.title": "Live execution",
   "autopilot.running": "RUNNING",
   "autopilot.clearLogs": "Clear logs and restart",
@@ -115,24 +123,30 @@ const en = {
   "autopilot.startUrl": "Initial URL",
   "autopilot.useCurrentUrl": "Use current URL",
   "autopilot.goal": "Goal",
-  "autopilot.goalPlaceholder": "E.g: Navigate to the pricing page, find the Pro plan and verify it costs $20...",
+  "autopilot.goalPlaceholder":
+    "E.g: Navigate to the pricing page, find the Pro plan and verify it costs $20...",
   "autopilot.run.needApiKey": "Set your API Key to start",
   "autopilot.run.start": "Start",
-  "autopilot.adaptiveMode.desc": "Adaptive reading is automatic: Autopilot switches analysis depth based on DOM changes and finishes with a final QA verification pass.",
+  "autopilot.adaptiveMode.desc":
+    "Adaptive reading is automatic: Autopilot switches analysis depth based on DOM changes and finishes with a final QA verification pass.",
   "autopilot.readingMode": "Reading Mode",
   "autopilot.readingMode.fast": "Fast",
   "autopilot.readingMode.normal": "Normal",
   "autopilot.readingMode.complex": "Complex",
-  "autopilot.readingMode.fastDesc": "Fast: detects only buttons, links, and basic inputs. Ideal for speed on simple sites.",
-  "autopilot.readingMode.normalDesc": "Normal: adds smart context and labels. The best balance for most tasks.",
-  "autopilot.readingMode.complexDesc": "Complex: deep scan of the full DOM. Use it if elements are not detected in complex apps (React/Angular).",
+  "autopilot.readingMode.fastDesc":
+    "Fast: detects only buttons, links, and basic inputs. Ideal for speed on simple sites.",
+  "autopilot.readingMode.normalDesc":
+    "Normal: adds smart context and labels. The best balance for most tasks.",
+  "autopilot.readingMode.complexDesc":
+    "Complex: deep scan of the full DOM. Use it if elements are not detected in complex apps (React/Angular).",
   "autopilot.skills.title": "Agent Skills",
   "autopilot.skill.click.desc": "Interacts with buttons and links",
   "autopilot.skill.type.desc": "Types into text fields",
   "autopilot.skill.assert.desc": "Verifies content and states",
   "autopilot.skill.select.desc": "Chooses options in menus",
   "autopilot.skill.navigate.desc": "Navigates between pages",
-  "autopilot.toast.noApiKey": "Error: API Key not found. Configure it in Settings.",
+  "autopilot.toast.noApiKey":
+    "Error: API Key not found. Configure it in Settings.",
 
   "history.title": "History",
   "history.subtitle": "Recent execution log",
@@ -141,7 +155,8 @@ const en = {
   "history.unnamed": "Unnamed flow",
   "history.stepCount": "{{count}} steps",
   "history.clear.title": "Clear History",
-  "history.clear.message": "Are you sure you want to clear all history? This action cannot be undone.",
+  "history.clear.message":
+    "Are you sure you want to clear all history? This action cannot be undone.",
   "history.clear.confirm": "Clear All",
   "history.clear.cancel": "Cancel",
   "history.toast.loadError": "Error loading history",
@@ -189,24 +204,32 @@ const en = {
   "stepEditor.aiNeedApiKey": "Set your API Key to use AI Magic",
   "stepEditor.aiGenerate": "Generate steps with AI",
   "stepEditor.emptyTitle": "No configured steps",
-  "stepEditor.emptyBody": "Use the \"Capture Step\" button to select page elements and create your test flow.",
+  "stepEditor.emptyBody":
+    'Use the "Capture Step" button to select page elements and create your test flow.',
   "stepEditor.toast.loadError": "Error loading flow",
   "stepEditor.toast.captureStep": "Captured step: {{action}} on {{tag}}",
-  "stepEditor.toast.activateInspectorError": "Error activating inspector. Make sure you're on a valid web tab.",
+  "stepEditor.toast.activateInspectorError":
+    "Error activating inspector. Make sure you're on a valid web tab.",
   "stepEditor.toast.noUrl": "No URL configured for this flow",
-  "stepEditor.toast.extensionOnly": "This function is only available in the Chrome extension",
+  "stepEditor.toast.extensionOnly":
+    "This function is only available in the Chrome extension",
   "stepEditor.toast.openInspectorOk": "Tab opened and inspector activated",
   "stepEditor.toast.openUrlError": "Error opening URL. Try manually.",
-  "stepEditor.toast.highlightError": "Could not highlight element. Make sure the page is loaded.",
+  "stepEditor.toast.highlightError":
+    "Could not highlight element. Make sure the page is loaded.",
   "stepEditor.toast.typeNeedsValue": "Step {{order}} (TYPE) requires a value",
-  "stepEditor.toast.selectNeedsValue": "Step {{order}} (SELECT) requires a value",
-  "stepEditor.toast.selectorMissing": "Step {{order}} does not have a valid selector",
+  "stepEditor.toast.selectNeedsValue":
+    "Step {{order}} (SELECT) requires a value",
+  "stepEditor.toast.selectorMissing":
+    "Step {{order}} does not have a valid selector",
   "stepEditor.toast.saved": "Flow saved successfully",
   "stepEditor.toast.saveError": "Error saving flow",
   "stepEditor.toast.aiGenerated": "{{count}} steps generated with AI!",
-  "stepEditor.toast.aiNoSteps": "AI did not generate any steps. Try being more specific.",
+  "stepEditor.toast.aiNoSteps":
+    "AI did not generate any steps. Try being more specific.",
   "stepEditor.toast.aiConnectError": "Error connecting to AI.",
-  "stepEditor.toast.noApiKey": "Error: API Key not found. Configure it in Settings.",
+  "stepEditor.toast.noApiKey":
+    "Error: API Key not found. Configure it in Settings.",
 
   "execution.failedToast": "Execution failed: {{error}}",
   "execution.unknownError": "Unknown error",
@@ -228,10 +251,12 @@ const en = {
   "toast.settings.languageError": "Could not save language",
   "toast.export.success": "Data exported successfully",
   "toast.export.error": "Error exporting data",
-  "toast.import.confirm": "Importing data will overwrite existing flows with the same ID. Continue?",
-  "toast.import.success": "Import complete: {{imported}} flows ({{created}} new, {{updated}} updated)",
+  "toast.import.confirm":
+    "Importing data will overwrite existing flows with the same ID. Continue?",
+  "toast.import.success":
+    "Import complete: {{imported}} flows ({{created}} new, {{updated}} updated)",
   "toast.import.error": "Error importing file: Invalid format",
-  "toast.reset.error": "Error resetting data"
+  "toast.reset.error": "Error resetting data",
 } as const;
 
 export default en;

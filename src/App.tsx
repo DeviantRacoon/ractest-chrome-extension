@@ -6,6 +6,7 @@ import { applyThemeToDocument } from "./commons/lib/theme";
 import { ToastProvider } from "./commons/components/ui";
 import storageService from "./commons/lib/storage";
 import AutopilotPage from "./pages/AutopilotPage";
+import HistoryDetailsPage from "./pages/HistoryDetailsPage";
 import HistoryPage from "./pages/HistoryPage";
 import ProfileFormPage from "./pages/ProfileFormPage";
 import RecipesPage from "./pages/RecipesPage";
@@ -36,6 +37,7 @@ function App() {
             <Route path="profile/edit" element={<ProfileFormPage />} />
             <Route path="profile/:id/steps" element={<StepEditorPage />} />
             <Route path="history" element={<HistoryPage />} />
+            <Route path="history/:id" element={<HistoryDetailsPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="test-inspector" element={<TestInspectorPage />} />
             <Route path="autopilot" element={<AutopilotPage />} />
