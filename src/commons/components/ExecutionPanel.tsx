@@ -134,7 +134,7 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-bg-main/95 backdrop-blur-md animate-fade-in">
       {/* Header */}
-      <div className="flex-none p-4 border-b border-border-default/50 bg-bg-main/50 relative overflow-hidden">
+      <div className="relative flex-none p-4 overflow-hidden border-b border-border-default/50 bg-bg-main/50">
         {/* Progress Background */}
         <div
           className={`absolute bottom-0 left-0 h-0.5 transition-all duration-300 ${
@@ -147,7 +147,7 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
           style={{ width: `${progressPercent}%` }}
         />
 
-        <div className="flex items-center justify-between relative z-10">
+        <div className="relative z-10 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
               className={`p-2 rounded-lg ${
@@ -166,7 +166,7 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
               {status === "cancelled" && <StopCircle className="w-5 h-5" />}
             </div>
             <div>
-              <h2 className="text-base font-bold text-text-primary leading-tight">
+              <h2 className="text-base font-bold leading-tight text-text-primary">
                 {status === "running"
                   ? t("execution.status.running")
                   : status === "completed"
@@ -190,9 +190,9 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-bg-card/50 rounded-full border border-border-default/50">
+          <div className="flex items-center gap-2 px-3 border rounded-full py-1.5 bg-bg-card/50 border-border-default/50">
             <Clock className="w-3.5 h-3.5 text-text-muted" />
-            <span className="text-xs font-mono font-medium text-text-primary">
+            <span className="font-mono text-xs font-medium text-text-primary">
               {formatTime(elapsed)}
             </span>
           </div>
@@ -202,7 +202,7 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
       {/* Main Content - Timeline */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth"
+        className="flex-1 p-4 space-y-6 overflow-y-auto scroll-smooth"
       >
         <div className="relative pl-4 space-y-6 before:absolute before:left-[19px] before:top-2 before:bottom-2 before:w-0.5 before:bg-border-default/30">
           {recipe.steps.map((step, index) => {
@@ -240,7 +240,7 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
                   ) : result?.status === "error" ? (
                     <XCircle className="w-5 h-5" />
                   ) : (
-                    <span className="text-sm font-bold font-mono">
+                    <span className="font-mono text-sm font-bold">
                       {index + 1}
                     </span>
                   )}
@@ -275,16 +275,16 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
                     )}
                   </div>
 
-                  <div className="text-xs font-mono text-text-muted break-all bg-bg-main/50 p-2 rounded border border-border-default/30">
+                  <div className="p-2 font-mono text-xs break-all border rounded text-text-muted bg-bg-main/50 border-border-default/30">
                     {step.selector}
                   </div>
 
                   {step.value && (
-                    <div className="mt-2 text-xs text-text-secondary flex items-center gap-2">
+                    <div className="flex items-center gap-2 mt-2 text-xs text-text-secondary">
                       <span className="text-text-muted">
                         {t("execution.value")}
                       </span>
-                      <span className="font-medium bg-bg-secondary px-1.5 py-0.5 rounded text-text-primary">
+                      <span className="font-medium rounded bg-bg-secondary px-1.5 py-0.5 text-text-primary">
                         {step.value}
                       </span>
                     </div>
@@ -292,7 +292,7 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
 
                   {/* Error Details */}
                   {result?.error && (
-                    <div className="mt-3 p-2 bg-status-error/10 border border-status-error/20 rounded text-xs text-status-error break-words">
+                    <div className="p-2 mt-3 text-xs break-words border rounded bg-status-error/10 border-status-error/20 text-status-error">
                       {result.error}
                     </div>
                   )}
@@ -304,13 +304,13 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
 
         {/* General Error (if not tied to a step) */}
         {error && !stepResults.find((r) => r.error === error) && (
-          <div className="mx-4 mt-4 p-4 bg-status-error/10 border border-status-error/30 rounded-xl flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-status-error flex-shrink-0" />
+          <div className="flex items-start gap-3 p-4 mx-4 mt-4 border bg-status-error/10 border-status-error/30 rounded-xl">
+            <AlertTriangle className="flex-shrink-0 w-5 h-5 text-status-error" />
             <div>
               <h4 className="text-sm font-bold text-status-error">
                 {t("execution.errorTitle")}
               </h4>
-              <p className="text-xs text-status-error/80 mt-1">{error}</p>
+              <p className="mt-1 text-xs text-status-error/80">{error}</p>
             </div>
           </div>
         )}
@@ -321,14 +321,14 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
 
       {/* Footer Controls */}
       <div className="flex-none p-4 border-t border-border-default bg-bg-main/80 backdrop-blur-md">
-        <div className="max-w-md mx-auto w-full">
+        <div className="w-full max-w-md mx-auto">
           {status === "running" ? (
             <Button
               variant="danger"
               fullWidth
               size="lg"
               onClick={handleStop}
-              className="shadow-lg shadow-status-error/20 hover:shadow-status-error/40 transition-shadow"
+              className="transition-shadow shadow-lg shadow-status-error/20 hover:shadow-status-error/40"
             >
               <StopCircle className="w-5 h-5 mr-2" />
               {t("execution.stop")}

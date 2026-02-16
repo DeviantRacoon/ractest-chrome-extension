@@ -35,7 +35,11 @@ const BottomNav: React.FC = () => {
     <div className="fixed left-0 right-0 z-40 flex justify-center px-4 pointer-events-none bottom-4">
       <nav className="flex items-center border shadow-lg pointer-events-auto bg-bg-card/70 backdrop-blur-md border-border-default/50 rounded-2xl p-1.5">
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
+          const isActive =
+            item.path === "/"
+              ? location.pathname === "/"
+              : location.pathname === item.path ||
+                location.pathname.startsWith(`${item.path}/`);
           const Icon = item.icon;
 
           return (

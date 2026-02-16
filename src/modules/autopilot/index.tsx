@@ -29,8 +29,6 @@ export const AutopilotView: React.FC<AutopilotViewProps> = ({
   logs,
   setLogs,
   hasApiKey,
-  readingMode,
-  setReadingMode,
   handleRun,
   handleStop,
   handleGetCurrentUrl,
@@ -190,14 +188,14 @@ export const AutopilotView: React.FC<AutopilotViewProps> = ({
                   <label className="block text-xs font-medium text-text-secondary mb-1.5 ml-1">
                     {t("autopilot.goal")}
                   </label>
-                  <div className="relative">
+                  <div className="space-y-3">
                     <textarea
                       className="w-full bg-bg-main border border-border-default rounded-lg p-3 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/50 outline-none transition-all min-h-[100px] resize-none"
                       placeholder={t("autopilot.goalPlaceholder")}
                       value={goal}
                       onChange={(e) => setGoal(e.target.value)}
                     />
-                    <div className="absolute bottom-3 right-3">
+                    <div className="flex justify-end">
                       <Button
                         variant="primary"
                         onClick={handleRun}
@@ -215,109 +213,10 @@ export const AutopilotView: React.FC<AutopilotViewProps> = ({
                     </div>
                   </div>
                 </div>
-                <div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5 ml-1">
-                      <label className="text-xs font-medium text-text-secondary">
-                        {t("autopilot.readingMode")}
-                      </label>
-                      <span className="text-[10px] text-accent-primary font-mono opacity-80">
-                        {readingMode === "fast" &&
-                          t("autopilot.readingMode.fast")}
-                        {readingMode === "normal" &&
-                          t("autopilot.readingMode.normal")}
-                        {readingMode === "complex" &&
-                          t("autopilot.readingMode.complex")}
-                      </span>
-                    </div>
-
-                    <div className="flex bg-bg-main border border-border-default rounded-lg p-0.5 mb-2">
-                      <button
-                        onClick={() => setReadingMode("fast")}
-                        title={t("autopilot.readingMode.fast")}
-                        className={`flex-1 flex items-center justify-center py-2 rounded-md transition-all ${
-                          readingMode === "fast"
-                            ? "bg-accent-primary/10 text-accent-primary shadow-sm ring-1 ring-accent-primary/20"
-                            : "text-text-muted hover:text-text-primary hover:bg-bg-secondary/50"
-                        }`}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                        </svg>
-                      </button>
-
-                      <button
-                        onClick={() => setReadingMode("normal")}
-                        title={t("autopilot.readingMode.normal")}
-                        className={`flex-1 flex items-center justify-center py-2 rounded-md transition-all ${
-                          readingMode === "normal"
-                            ? "bg-accent-primary/10 text-accent-primary shadow-sm ring-1 ring-accent-primary/20"
-                            : "text-text-muted hover:text-text-primary hover:bg-bg-secondary/50"
-                        }`}
-                      >
-                        <Brain className="w-4 h-4" />
-                      </button>
-
-                      <button
-                        onClick={() => setReadingMode("complex")}
-                        title={t("autopilot.readingMode.complex")}
-                        className={`flex-1 flex items-center justify-center py-2 rounded-md transition-all ${
-                          readingMode === "complex"
-                            ? "bg-accent-primary/10 text-accent-primary shadow-sm ring-1 ring-accent-primary/20"
-                            : "text-text-muted hover:text-text-primary hover:bg-bg-secondary/50"
-                        }`}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M3 7V5a2 2 0 0 1 2-2h2" />
-                          <path d="M17 3h2a2 2 0 0 1 2 2v2" />
-                          <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-                          <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-                          <rect width="10" height="10" x="7" y="7" rx="2" />
-                          <path d="m16 16-1.9-1.9" />
-                        </svg>
-                      </button>
-                    </div>
-
-                    <div className="bg-bg-secondary/30 rounded-lg p-2 border border-border-default/30">
-                      <p className="text-[10px] text-text-muted leading-relaxed">
-                        {readingMode === "fast" && (
-                          <span className="animate-fade-in">
-                            {t("autopilot.readingMode.fastDesc")}
-                          </span>
-                        )}
-                        {readingMode === "normal" && (
-                          <span className="animate-fade-in">
-                            {t("autopilot.readingMode.normalDesc")}
-                          </span>
-                        )}
-                        {readingMode === "complex" && (
-                          <span className="animate-fade-in">
-                            {t("autopilot.readingMode.complexDesc")}
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
+                <div className="bg-bg-secondary/30 rounded-lg p-3 border border-border-default/30">
+                  <p className="text-[11px] text-text-muted leading-relaxed">
+                    {t("autopilot.adaptiveMode.desc")}
+                  </p>
                 </div>
               </div>
             </div>

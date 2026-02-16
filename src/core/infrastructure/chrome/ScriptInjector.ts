@@ -197,3 +197,90 @@ export function injectConsoleInterceptor(tabId: number) {
     })
     .catch((err) => console.error("Failed to inject console interceptor", err));
 }
+
+export function injectErrorMonitor(tabId: number) {
+  chrome.scripting
+    .executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: () => {
+        if ((window as any).__RAC_MONITOR_INJECTED__) return;
+        (window as any).__RAC_MONITOR_INJECTED__ = true;
+
+        function sendToContentScript(subtype: string, payload: unknown) {
+          window.postMessage(
+            {
+              type: "RAC_CAPTURED_ERROR",
+              subtype,
+              payload,
+              timestamp: Date.now(),
+            },
+            "*",
+          );
+        }
+
+        window.addEventListener("error", (event) => {
+          sendToContentScript("WINDOW", event.message || "Unknown error");
+        });
+
+        window.addEventListener("unhandledrejection", (event) => {
+          sendToContentScript(
+            "PROMISE",
+            event.reason ? String(event.reason) : "Unknown reason",
+          );
+        });
+
+        const originalFetch = window.fetch;
+        window.fetch = async function (...args) {
+          try {
+            const response = await originalFetch.apply(this, args);
+            if (!response.ok && response.status >= 400) {
+              sendToContentScript("NETWORK", {
+                method: "FETCH",
+                url: response.url,
+                status: response.status,
+                statusText: response.statusText,
+              });
+            }
+            return response;
+          } catch (e) {
+            sendToContentScript("NETWORK", {
+              method: "FETCH",
+              url: args[0] ? String(args[0]) : "unknown",
+              error: String(e),
+            });
+            throw e;
+          }
+        };
+
+        const originalOpen = XMLHttpRequest.prototype.open;
+        const originalSend = XMLHttpRequest.prototype.send;
+
+        XMLHttpRequest.prototype.open = function (
+          method: string,
+          url: string | URL,
+        ) {
+          (this as any)._rac_url = url;
+          (this as any)._rac_method = method;
+          return originalOpen.apply(this, arguments as any);
+        };
+
+        XMLHttpRequest.prototype.send = function () {
+          this.addEventListener("loadend", function () {
+            if (this.status >= 400) {
+              sendToContentScript("NETWORK", {
+                method: "XHR",
+                url: (this as any)._rac_url,
+                status: this.status,
+                statusText: this.statusText,
+              });
+            }
+          });
+          return originalSend.apply(this, arguments as any);
+        };
+
+        console.log("[RacTest Monitor] Passive error monitoring active.");
+      },
+    })
+    .catch((err) => console.error("Failed to inject error monitor", err));
+}

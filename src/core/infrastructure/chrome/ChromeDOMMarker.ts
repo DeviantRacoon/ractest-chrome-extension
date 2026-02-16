@@ -78,7 +78,14 @@ export class ChromeDOMMarker implements IDOMMarker {
   async executeActionOnMarkedElement(
     _profileId: string,
     elementId: number,
-    action: "CLICK" | "TYPE" | "SELECT" | "HOVER" | "ASSERT",
+    action:
+      | "CLICK"
+      | "TYPE"
+      | "SELECT"
+      | "CHECK"
+      | "UNCHECK"
+      | "HOVER"
+      | "ASSERT",
     value?: string,
   ): Promise<void> {
     const tabId = await getActiveTabId();
@@ -136,6 +143,55 @@ export class ChromeDOMMarker implements IDOMMarker {
         if (window.RAC_SOM && window.RAC_SOM.scanForErrors) {
           // @ts-ignore
           return window.RAC_SOM.scanForErrors();
+        }
+        return [];
+      },
+    });
+
+    return result[0]?.result || [];
+  }
+
+  async getOutcomeSignals(): Promise<string[]> {
+    const tabId = await getActiveTabId();
+    if (!tabId) return [];
+
+    const result = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        // @ts-ignore
+        if (window.RAC_SOM && window.RAC_SOM.getOutcomeSignals) {
+          // @ts-ignore
+          return window.RAC_SOM.getOutcomeSignals();
+        }
+        return [];
+      },
+    });
+
+    return result[0]?.result || [];
+  }
+
+  async getVisualSignals(): Promise<
+    Array<{
+      text: string;
+      role: string;
+      className: string;
+      color: string;
+      backgroundColor: string;
+      borderColor: string;
+      ariaLive: string;
+      toneHint: "success" | "error" | "warning" | "info" | "neutral";
+    }>
+  > {
+    const tabId = await getActiveTabId();
+    if (!tabId) return [];
+
+    const result = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        // @ts-ignore
+        if (window.RAC_SOM && window.RAC_SOM.getVisualSignals) {
+          // @ts-ignore
+          return window.RAC_SOM.getVisualSignals();
         }
         return [];
       },

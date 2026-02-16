@@ -297,6 +297,7 @@ class StorageService {
       language: "en",
       highlightColor: "#10B981",
       notificationsEnabled: true,
+      enableAiForTesting: true,
       agentMaxSteps: 20,
       agentMode: "strict_fail_fast",
       maxRetriesNonCritical: 0,

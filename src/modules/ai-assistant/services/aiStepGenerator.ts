@@ -1,6 +1,8 @@
 import { inspectorService } from "../../../commons/lib/inspectorService";
 import type { TestStep } from "../../../commons/types";
-import { openRouterService } from "./openRouterService";
+
+const getOpenRouterService = async () =>
+  (await import("./openRouterService")).openRouterService;
 
 export interface AIStepGenerationResult {
   steps: TestStep[];
@@ -48,7 +50,7 @@ export class AIStepGenerator {
             "selector": "Use the EXACT selector provided in the list",
             "value": "string value for TYPE/SELECT",
             "useFakeData": boolean (true if user asks for random/fake data),
-            "fakeDataType": "email" | "name" | "phone" | "address" | "company" | "date" | "lorem" (if useFakeData is true),
+            "fakeDataType": "name" | "firstName" | "lastName" | "email" | "username" | "password" | "phone" | "address" | "city" | "state" | "zipCode" | "country" | "company" | "jobTitle" | "url" | "date" | "time" | "datetime" | "number" | "price" | "uuid" | "color" | "lorem" (if useFakeData is true),
              "explanation": "Brief reason for this step"
           }
         ]
@@ -73,6 +75,7 @@ export class AIStepGenerator {
     `;
 
     // 4. Call AI
+    const openRouterService = await getOpenRouterService();
     const response = await openRouterService.generateCompletion(
       systemPrompt,
       userPrompt,

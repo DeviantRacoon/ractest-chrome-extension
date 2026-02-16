@@ -12,6 +12,7 @@ import type {
   TestProfile,
 } from "../types";
 import type { ContentToPopupMessage } from "../types/messages";
+import { roles } from "aria-query";
 
 type StepResultCallback = (result: StepExecutionResult) => void;
 type ExecutionCompleteCallback = (results: StepExecutionResult[]) => void;
@@ -19,6 +20,40 @@ type ExecutionFailedCallback = (
   error: string,
   results: StepExecutionResult[],
 ) => void;
+
+type AutomationFeedbackItem = {
+  text: string;
+  className: string;
+  role: string;
+  ariaLive: string;
+  color: string;
+  backgroundColor: string;
+  borderColor: string;
+  accessibleName?: string;
+  accessibleDescription?: string;
+  labelText?: string;
+};
+
+type AutomationFeedbackSnapshot = {
+  url: string;
+  title: string;
+  feedbackItems: AutomationFeedbackItem[];
+  invalidFields: string[];
+};
+
+type TemporalEvidenceWindow = {
+  startedAt: number;
+  endedAt: number;
+  samples: number;
+  snapshots: AutomationFeedbackSnapshot[];
+};
+
+type DeterministicOutcome = {
+  verdict: "success" | "failure" | "inconclusive";
+  rationale: string;
+  score: number;
+  signals: string[];
+};
 
 export class ExecutionService {
   private onStepResultCallback: StepResultCallback | null = null;
@@ -29,6 +64,11 @@ export class ExecutionService {
   private isExecuting = false;
   private executionStartTime = 0;
   private pendingFailureSignals: FailureSignal[] = [];
+
+  private static readonly FAILURE_KEYWORDS =
+    /(failed|error|invalid|required|unable|degraded|rechazad|fall[óo]|inv[aá]lid|obligatorio)/i;
+  private static readonly SUCCESS_KEYWORDS =
+    /(success|successful|created|saved|completed|welcome|exito|correctamente|completado)/i;
 
   constructor() {
     // Listen for messages from content script
@@ -76,12 +116,39 @@ export class ExecutionService {
                 timestamp: message.timestamp || Date.now(),
                 payload: message.payload,
               };
-
-              this.executionLogs.push({
-                timestamp: signal.timestamp,
-                level: "error",
-                message: `[${signal.subtype}] ${signal.message}`,
-              });
+              if (
+                subtype === "CONSOLE" &&
+                message.payload &&
+                typeof message.payload === "object"
+              ) {
+                const payload = message.payload as {
+                  timestamp?: number;
+                  level?: string;
+                  message?: string;
+                  stack?: string;
+                };
+                const level = String(payload.level || "log").toLowerCase();
+                const mappedLevel: import("../types").ConsoleLogEntry["level"] =
+                  level === "error" ||
+                  level === "warn" ||
+                  level === "info" ||
+                  level === "debug" ||
+                  level === "log"
+                    ? level
+                    : "log";
+                this.executionLogs.push({
+                  timestamp: Number(payload.timestamp || signal.timestamp),
+                  level: mappedLevel,
+                  message: String(payload.message || signal.message),
+                  stack: payload.stack,
+                });
+              } else {
+                this.executionLogs.push({
+                  timestamp: signal.timestamp,
+                  level: "error",
+                  message: `[${signal.subtype}] ${signal.message}`,
+                });
+              }
 
               if (this.isHardFailureSignal(signal)) {
                 this.pendingFailureSignals.push(signal);
@@ -242,6 +309,48 @@ export class ExecutionService {
             return;
           }
 
+          if (
+            this.currentTabId &&
+            this.isCriticalCommitStep(step, result.message)
+          ) {
+            const submitWindow = await this.collectTemporalEvidenceWindow(
+              this.currentTabId,
+              4500,
+              300,
+            );
+            const deterministicAfterSubmit =
+              this.evaluateDeterministicOutcomeFromWindow(submitWindow);
+            if (deterministicAfterSubmit.verdict === "failure") {
+              const errorMessage = `Fallo detectado automáticamente (DETERMINISTIC_POST_SUBMIT): ${deterministicAfterSubmit.rationale}`;
+              const failureStepResult: StepExecutionResult = {
+                stepId: step.id,
+                status: "error",
+                message: errorMessage,
+                error: errorMessage,
+                timestamp: Date.now(),
+              };
+              results.push(failureStepResult);
+              this.onStepResultCallback?.(failureStepResult);
+              await this.saveHistory(recipe, "failed", results, errorMessage, {
+                subtype: "FORM_VALIDATION",
+                message: deterministicAfterSubmit.rationale,
+                timestamp: Date.now(),
+                payload: {
+                  score: deterministicAfterSubmit.score,
+                  signals: deterministicAfterSubmit.signals,
+                  samples: submitWindow.samples,
+                },
+              });
+              this.onFailedCallback?.(errorMessage, results);
+              this.sendNotification(
+                "Error en el flujo",
+                "Se detectó fallo visible tras el submit.",
+              );
+              this.resetExecutionState();
+              return;
+            }
+          }
+
           if (step.delay > reactiveWindowMs) {
             await this.wait(step.delay - reactiveWindowMs);
           }
@@ -269,6 +378,40 @@ export class ExecutionService {
       }
 
       // Execution Complete
+      const finalOutcome = await this.evaluateFinalOutcome(
+        recipe,
+        results,
+        this.currentTabId,
+      );
+      if (finalOutcome.verdict === "failure") {
+        const errorMessage = `Fallo detectado automáticamente (FINAL_OUTCOME): ${finalOutcome.rationale}`;
+        const failureStepResult: StepExecutionResult = {
+          stepId: `ai-final-${Date.now()}`,
+          status: "error",
+          message: errorMessage,
+          error: errorMessage,
+          timestamp: Date.now(),
+        };
+        results.push(failureStepResult);
+        this.onStepResultCallback?.(failureStepResult);
+        await this.saveHistory(recipe, "failed", results, errorMessage, {
+          subtype: "FORM_VALIDATION",
+          message: finalOutcome.rationale,
+          timestamp: Date.now(),
+          payload: {
+            score: finalOutcome.score,
+            signals: finalOutcome.signals,
+          },
+        });
+        this.onFailedCallback?.(errorMessage, results);
+        this.sendNotification(
+          "Error en el flujo",
+          "La validación final detectó que el formulario terminó en estado de fallo.",
+        );
+        this.resetExecutionState();
+        return;
+      }
+
       await this.saveHistory(recipe, "completed", results);
       this.onCompleteCallback?.(results);
       this.resetExecutionState();
@@ -668,6 +811,346 @@ export class ExecutionService {
     this.isExecuting = false;
     this.pendingFailureSignals = [];
     this.currentTabId = null;
+  }
+
+  private async getAutomationFeedbackOnContent(
+    tabId: number,
+  ): Promise<AutomationFeedbackSnapshot | null> {
+    return await new Promise((resolve) => {
+      chrome.tabs.sendMessage(
+        tabId,
+        { type: "GET_AUTOMATION_FEEDBACK" },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            resolve(null);
+            return;
+          }
+          if (response?.success && response.feedback) {
+            resolve(response.feedback);
+            return;
+          }
+          resolve(null);
+        },
+      );
+    });
+  }
+
+  private isCriticalCommitStep(step: TestStep, message?: string): boolean {
+    if (step.action !== "CLICK") return false;
+    const text = `${step.selector || ""} ${message || ""}`.toLowerCase();
+    return /(submit|save|create|register|signup|sign up|enviar|guardar|continuar|confirm)/i.test(
+      text,
+    );
+  }
+
+  private getNormalizedRole(role: string): string {
+    return String(role || "").trim().toLowerCase();
+  }
+
+  private isKnownAriaRole(role: string): boolean {
+    const normalized = this.getNormalizedRole(role);
+    if (!normalized) return false;
+    return roles.has(normalized as any);
+  }
+
+  private isAlertLikeRole(role: string): boolean {
+    const normalized = this.getNormalizedRole(role);
+    return normalized === "alert" || normalized === "alertdialog";
+  }
+
+  private isStatusLikeRole(role: string): boolean {
+    const normalized = this.getNormalizedRole(role);
+    return normalized === "status" || normalized === "log";
+  }
+
+  private async collectTemporalEvidenceWindow(
+    tabId: number,
+    durationMs = 4500,
+    intervalMs = 300,
+  ): Promise<TemporalEvidenceWindow> {
+    const startedAt = Date.now();
+    const snapshots: AutomationFeedbackSnapshot[] = [];
+
+    while (Date.now() - startedAt <= durationMs) {
+      const snapshot = await this.getAutomationFeedbackOnContent(tabId);
+      if (snapshot) snapshots.push(snapshot);
+      await this.wait(intervalMs);
+    }
+
+    return {
+      startedAt,
+      endedAt: Date.now(),
+      samples: snapshots.length,
+      snapshots,
+    };
+  }
+
+  private evaluateDeterministicOutcomeFromWindow(
+    evidence: TemporalEvidenceWindow,
+  ): DeterministicOutcome {
+    const signals: string[] = [];
+    let score = 0;
+
+    const allItems = evidence.snapshots.flatMap((s) => s.feedbackItems);
+    const invalidFieldsCount = new Set(
+      evidence.snapshots.flatMap((s) => s.invalidFields),
+    ).size;
+
+    const hasFailureText = allItems.some((item) =>
+      ExecutionService.FAILURE_KEYWORDS.test(
+        `${item.text} ${item.className} ${item.role} ${item.ariaLive} ${item.accessibleName || ""} ${item.accessibleDescription || ""} ${item.labelText || ""}`,
+      ),
+    );
+    if (hasFailureText) {
+      score += 5;
+      signals.push("failure_text_detected");
+    }
+
+    const hasFailureStyle = allItems.some((item) =>
+      /(danger|error|invalid|alert-danger|text-danger)/i.test(item.className),
+    );
+    if (hasFailureStyle) {
+      score += 4;
+      signals.push("failure_style_detected");
+    }
+
+    const hasRoleAlertFailure = allItems.some((item) => {
+      const role = this.getNormalizedRole(item.role);
+      if (!role || !this.isKnownAriaRole(role)) return false;
+      if (!this.isAlertLikeRole(role)) return false;
+      return ExecutionService.FAILURE_KEYWORDS.test(
+        `${item.text || ""} ${item.className || ""} ${item.accessibleName || ""} ${item.accessibleDescription || ""}`,
+      );
+    });
+    if (hasRoleAlertFailure) {
+      score += 3;
+      signals.push("role_alert_failure");
+    }
+
+    const hasAssertiveFailure = allItems.some((item) => {
+      const live = this.getNormalizedRole(item.ariaLive);
+      if (live !== "assertive") return false;
+      return ExecutionService.FAILURE_KEYWORDS.test(
+        `${item.text || ""} ${item.className || ""} ${item.accessibleName || ""} ${item.accessibleDescription || ""}`,
+      );
+    });
+    if (hasAssertiveFailure) {
+      score += 2;
+      signals.push("assertive_failure_feedback");
+    }
+
+    const noisyStatusSpinner = allItems.some((item) => {
+      const role = this.getNormalizedRole(item.role);
+      if (!this.isStatusLikeRole(role)) return false;
+      const text = `${item.text || ""} ${item.accessibleName || ""}`.trim();
+      const cls = String(item.className || "").toLowerCase();
+      return !text && /(spinner|loading|loader|progress)/i.test(cls);
+    });
+    if (noisyStatusSpinner) {
+      score -= 1;
+      signals.push("status_spinner_noise");
+    }
+
+    if (invalidFieldsCount > 0) {
+      score += 5;
+      signals.push(`invalid_fields:${invalidFieldsCount}`);
+    }
+
+    const hasSuccessText = allItems.some((item) => {
+      const text = `${item.text || ""} ${item.className || ""} ${item.accessibleName || ""} ${item.accessibleDescription || ""}`;
+      if (!ExecutionService.SUCCESS_KEYWORDS.test(text)) return false;
+      const role = this.getNormalizedRole(item.role);
+      if (!role) return true;
+      if (!this.isKnownAriaRole(role)) return true;
+      return !this.isAlertLikeRole(role) || /success|created|saved|completed|welcome/i.test(text);
+    });
+    if (hasSuccessText) {
+      score -= 4;
+      signals.push("success_text_detected");
+    }
+
+    if (score >= 6) {
+      return {
+        verdict: "failure",
+        rationale:
+          allItems.find((item) =>
+            ExecutionService.FAILURE_KEYWORDS.test(
+              `${item.text} ${item.className} ${item.role} ${item.accessibleName || ""} ${item.accessibleDescription || ""}`,
+            ),
+          )?.text ||
+          "Deterministic rules detected visible failure signals after submit.",
+        score,
+        signals,
+      };
+    }
+
+    if (score <= -4) {
+      return {
+        verdict: "success",
+        rationale: "Deterministic rules detected strong success signals.",
+        score,
+        signals,
+      };
+    }
+
+    return {
+      verdict: "inconclusive",
+      rationale: "Deterministic rules found mixed or weak signals.",
+      score,
+      signals,
+    };
+  }
+
+  private async evaluateFinalOutcome(
+    recipe: TestProfile,
+    results: StepExecutionResult[],
+    tabId: number | null,
+  ): Promise<DeterministicOutcome> {
+    if (!tabId) {
+      return {
+        verdict: "inconclusive",
+        rationale: "No active tab for final evaluation.",
+        score: 0,
+        signals: ["no_active_tab"],
+      };
+    }
+
+    const evidence = await this.collectTemporalEvidenceWindow(tabId, 3500, 300);
+    const deterministic = this.evaluateDeterministicOutcomeFromWindow(evidence);
+    if (deterministic.verdict !== "inconclusive") return deterministic;
+
+    try {
+      const [{ openRouterService }, { storageService }] = await Promise.all([
+        import("../../modules/ai-assistant/services/openRouterService"),
+        import("./storage"),
+      ]);
+      const settings = await storageService.getSettings();
+      const aiEnabled = settings.enableAiForTesting !== false;
+      if (!aiEnabled) {
+        return {
+          ...deterministic,
+          rationale:
+            deterministic.rationale +
+            " AI disambiguation disabled in settings.",
+          signals: [...deterministic.signals, "ai_disabled_in_settings"],
+        };
+      }
+
+      if (!settings.openRouterApiKey) {
+        return {
+          ...deterministic,
+          rationale:
+            deterministic.rationale +
+            " No API key configured for AI disambiguation.",
+          signals: [...deterministic.signals, "no_api_key_for_ai"],
+        };
+      }
+
+      const latestSnapshot = evidence.snapshots[evidence.snapshots.length - 1] || {
+        url: recipe.url,
+        title: "",
+        feedbackItems: [],
+        invalidFields: [],
+      };
+
+      const systemPrompt = `
+        You are RacTest final test outcome validator.
+        Determine if this automated test run ended in success, failure, or inconclusive.
+        Use all evidence: visible feedback texts, classes, roles, aria-live, colors, invalid fields, and executed steps.
+
+        Return strict JSON:
+        {
+          "verdict": "success" | "failure" | "inconclusive",
+          "rationale": "short evidence-based explanation"
+        }
+
+        Rules:
+        - If visible feedback indicates signup/register/create failed, return failure.
+        - Do not infer success only because steps executed.
+        - If evidence is weak/conflicting, return inconclusive.
+        - Do NOT provide QA commentary, advice, or explanations outside JSON.
+        - Output JSON only.
+      `;
+
+      const userPrompt = `
+        Recipe: ${recipe.name}
+        Recipe URL: ${recipe.url}
+        Current URL: ${latestSnapshot.url}
+        Title: ${latestSnapshot.title}
+
+        Step results:
+        ${results
+          .map((r, i) => `${i + 1}. ${r.status} - ${r.message || ""}`)
+          .join("\n")}
+
+        Invalid fields:
+        ${latestSnapshot.invalidFields.join(", ") || "none"}
+
+        Visual feedback items:
+        ${JSON.stringify(latestSnapshot.feedbackItems.slice(0, 20), null, 2)}
+
+        Deterministic pre-score:
+        ${JSON.stringify(
+          { score: deterministic.score, signals: deterministic.signals },
+          null,
+          2,
+        )}
+      `;
+      console.debug("[RacTest][Execution][AI Final Eval Payload]", {
+        recipe: recipe.name,
+        recipeUrl: recipe.url,
+        currentUrl: latestSnapshot.url,
+        title: latestSnapshot.title,
+        stepResults: results.map((r) => ({
+          stepId: r.stepId,
+          status: r.status,
+          message: r.message,
+        })),
+        invalidFields: latestSnapshot.invalidFields,
+        feedbackItems: latestSnapshot.feedbackItems.slice(0, 20),
+        deterministic,
+        samples: evidence.samples,
+        userPromptPreview: userPrompt.slice(0, 1800),
+      });
+
+      const response = await openRouterService.generateCompletion(
+        systemPrompt,
+        userPrompt,
+      );
+
+      const clean = response.content
+        .replace(/<think>[\s\S]*?<\/think>/g, "")
+        .trim();
+      const jsonMatch =
+        clean.match(/```json\n([\s\S]*?)\n```/) ||
+        clean.match(/```([\s\S]*?)```/) ||
+        clean.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(jsonMatch?.[1] || jsonMatch?.[0] || clean);
+      const verdict =
+        parsed?.verdict === "success" ||
+        parsed?.verdict === "failure" ||
+        parsed?.verdict === "inconclusive"
+          ? parsed.verdict
+          : "inconclusive";
+      const rationale =
+        typeof parsed?.rationale === "string" && parsed.rationale.trim()
+          ? parsed.rationale.trim().slice(0, 300)
+          : "AI returned no rationale.";
+      return {
+        verdict,
+        rationale,
+        score: deterministic.score,
+        signals: [...deterministic.signals, "ai_disambiguation"],
+      };
+    } catch (error) {
+      return {
+        ...deterministic,
+        rationale:
+          deterministic.rationale +
+          ` AI final check failed: ${String(error)}`,
+        signals: [...deterministic.signals, "ai_error"],
+      };
+    }
   }
 }
 

@@ -1,4 +1,7 @@
-import { injectConsoleInterceptor } from "../../core/infrastructure/chrome/ScriptInjector";
+import {
+  injectConsoleInterceptor,
+  injectErrorMonitor,
+} from "../../core/infrastructure/chrome/ScriptInjector";
 import { initializeHistoryManager } from "../../modules/history/services/BackgroundHistoryManager";
 
 // Open Side Panel when clicking the extension icon
@@ -13,6 +16,12 @@ initializeHistoryManager();
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "INJECT_LOGGER" && sender.tab?.id) {
     injectConsoleInterceptor(sender.tab.id);
+    sendResponse({ success: true });
+    return;
+  }
+
+  if (message.type === "INJECT_ERROR_MONITOR" && sender.tab?.id) {
+    injectErrorMonitor(sender.tab.id);
     sendResponse({ success: true });
   }
 });

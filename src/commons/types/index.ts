@@ -25,11 +25,27 @@ export interface TestStep {
   useFakeData?: boolean;
   fakeDataType?:
     | "name"
+    | "firstName"
+    | "lastName"
     | "email"
+    | "username"
+    | "password"
     | "phone"
     | "address"
+    | "city"
+    | "state"
+    | "zipCode"
+    | "country"
     | "company"
+    | "jobTitle"
+    | "url"
     | "date"
+    | "time"
+    | "datetime"
+    | "number"
+    | "price"
+    | "uuid"
+    | "color"
     | "lorem";
   delay: number; // milliseconds
   order: number;
@@ -38,11 +54,27 @@ export interface TestStep {
 
 export type FakeDataType =
   | "name"
+  | "firstName"
+  | "lastName"
   | "email"
+  | "username"
+  | "password"
   | "phone"
   | "address"
+  | "city"
+  | "state"
+  | "zipCode"
+  | "country"
   | "company"
+  | "jobTitle"
+  | "url"
   | "date"
+  | "time"
+  | "datetime"
+  | "number"
+  | "price"
+  | "uuid"
+  | "color"
   | "lorem";
 
 /**
@@ -144,6 +176,7 @@ export interface UserSettings {
   language: AppLanguagePreference; // UI language preference
   highlightColor: string; // inspector highlight color
   notificationsEnabled: boolean; // show browser notifications
+  enableAiForTesting?: boolean; // Enable AI assistance during test execution
   openRouterApiKey?: string; // API Key for AI features
   aiModel?: string; // Selected AI Model
   aiMaxTokens?: number; // Max tokens to generate

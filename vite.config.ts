@@ -25,6 +25,27 @@ export default defineConfig({
         },
         chunkFileNames: "assets/[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]",
+        manualChunks: (id) => {
+          if (!id.includes("node_modules")) return undefined;
+          if (
+            id.includes("/react/") ||
+            id.includes("/react-dom/") ||
+            id.includes("/react-router")
+          ) {
+            return "vendor-react";
+          }
+          if (
+            id.includes("/@dnd-kit/") ||
+            id.includes("/@faker-js/") ||
+            id.includes("/react-markdown/")
+          ) {
+            return "vendor-features";
+          }
+          if (id.includes("/lucide-react/")) {
+            return "vendor-icons";
+          }
+          return "vendor-misc";
+        },
       },
     },
   },

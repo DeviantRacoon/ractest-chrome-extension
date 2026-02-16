@@ -5,7 +5,7 @@ import type {
   IInspector,
   ILLMProvider,
 } from "../domain/interfaces";
-import type { TestStep } from "../../commons/types";
+import type { ConsoleLogEntry, FakeDataType, TestStep } from "../../commons/types";
 import { ReportGenerator } from "./ReportGenerator";
 
 export class AgentService implements IAgent {
@@ -73,6 +73,7 @@ export class AgentService implements IAgent {
     let fatalRuntimeError: string | null = null;
     const knownVisualErrors = new Set<string>();
     let lastExecutedWasCriticalCommit = false;
+    const capturedConsoleLogs: ConsoleLogEntry[] = [];
 
     // Subscribe to passive monitoring
     // Note: We need to handle cleanup of this subscription if possible,
@@ -80,8 +81,49 @@ export class AgentService implements IAgent {
     // Ideally inspector.onErrorCaptured should allow unsubscribing.
     // For this refactor, we leave it as is but note the architectural improvement needed.
     this.inspector.onErrorCaptured((error) => {
+      const subtype = String(error.subtype || "");
+      if (subtype === "CONSOLE" && error.payload && typeof error.payload === "object") {
+        const level = String((error.payload as any).level || "log").toLowerCase();
+        const message = String((error.payload as any).message || "");
+        const preview = `${level}: ${message}`.slice(0, 280);
+        const mappedLevel: ConsoleLogEntry["level"] =
+          level === "error" ||
+          level === "warn" ||
+          level === "info" ||
+          level === "debug" ||
+          level === "log"
+            ? level
+            : "log";
+        capturedConsoleLogs.push({
+          timestamp: Number((error.payload as any).timestamp || Date.now()),
+          level: mappedLevel,
+          message,
+          stack:
+            typeof (error.payload as any).stack === "string"
+              ? (error.payload as any).stack
+              : undefined,
+        });
+
+        if (level === "error") {
+          this.log("error", `🚨 Console Error: ${preview}`);
+          reportGen.addError("console", error.payload);
+          this.lastOutcome = "error_detected";
+        } else if (level === "warn") {
+          this.log("info", `⚠️ Console Warn: ${preview}`);
+          reportGen.addError("console", error.payload);
+        } else {
+          this.log("info", `🪵 Console ${level}: ${preview}`);
+        }
+        return;
+      }
+
       const preview = JSON.stringify(error.payload).substring(0, 200);
       this.log("error", `🚨 Page Error [${error.subtype}]: ${preview}`);
+      capturedConsoleLogs.push({
+        timestamp: Number(error.timestamp || Date.now()),
+        level: "error",
+        message: `[${subtype || "UNKNOWN"}] ${preview}`,
+      });
       reportGen.addError(
         error.subtype === "NETWORK" ? "network" : "console",
         error.payload,
@@ -96,12 +138,12 @@ export class AgentService implements IAgent {
 
     this.log("info", `🚀 Agent started. Goal: "${goal}"`);
 
-    // Fetch configuration
+    // Fetch configuration (Autopilot now uses a single adaptive pipeline)
     const { storageService } = await import("../../commons/lib/storage");
     const settings = await storageService.getSettings();
+    const AI_AVAILABLE =
+      settings.enableAiForTesting !== false && !!settings.openRouterApiKey;
     const MAX_STEPS = settings.agentMaxSteps || 20;
-    const READING_MODE = settings.readingMode || "normal";
-    const AGENT_MODE = settings.agentMode || "strict_fail_fast";
     const MAX_RETRIES_NON_CRITICAL =
       settings.maxRetriesNonCritical !== undefined
         ? Math.max(0, Math.min(3, settings.maxRetriesNonCritical))
@@ -119,7 +161,12 @@ export class AgentService implements IAgent {
     let previousContextLength = 0;
     let previousContextModalFlag = false;
     let currentMarkedContext = "";
+    let previousMarkedContext = "";
     let currentElementMetaMap = new Map<number, { tag: string; raw: string }>();
+    let unchangedCycles = 0;
+    let lastVisualSignature = "";
+    let fillFirstStrategy = this.shouldUseFillFirstStrategy(goal);
+    let hasSubmittedCriticalAction = false;
 
     try {
       while (reportGen.getReport().stepsExecuted < MAX_STEPS) {
@@ -135,16 +182,28 @@ export class AgentService implements IAgent {
         this.log("thinking", "⏳ Waiting for page stability...");
         await this.domMarker.waitForDOMStability(STABILITY_TIMEOUT);
         if (this.shouldStop(reportGen)) break;
-        this.log("thinking", `👀 Analyzing page (${READING_MODE} mode)...`);
-        await this.domMarker.markInteractiveElements(profileId, READING_MODE);
+        const adaptiveMode = this.pickAdaptiveReadMode(
+          unchangedCycles,
+          reportGen.getReport().stepsExecuted,
+        );
+        this.log("thinking", `👀 Analyzing page (${adaptiveMode} adaptive)...`);
+        await this.domMarker.markInteractiveElements(profileId, adaptiveMode);
         const markedContext = await this.domMarker.getMarkedContext(profileId);
-        currentMarkedContext = markedContext;
+        currentMarkedContext = this.compactContext(markedContext, previousMarkedContext);
         currentElementMetaMap = this.extractElementMetaMap(markedContext);
+        const formProgress = this.getFormProgress(markedContext);
+        if (
+          formProgress.totalControls >= 4 &&
+          reportGen.getReport().stepsExecuted <= 1
+        ) {
+          fillFirstStrategy = true;
+        }
 
         const currentDomHash = this.computeHash(markedContext);
         const isDomUnchanged =
           currentDomHash === this.lastDomHash && this.lastDomHash !== "";
         this.lastDomHash = currentDomHash;
+        unchangedCycles = isDomUnchanged ? unchangedCycles + 1 : 0;
         const currentContextLength = markedContext.length;
         const currentModalFlag = this.hasModalSignals(markedContext);
 
@@ -157,47 +216,101 @@ export class AgentService implements IAgent {
           `🔍 Context size: ${markedContext.length} chars ${isDomUnchanged ? "(Unchanged)" : ""}`,
         );
 
+        const previousSteps = reportGen.getReport().steps;
+
         // 2.2 Check for Visual Errors
         const visualErrors = await this.domMarker.detectVisualErrors();
-        if (visualErrors.length > 0) {
-          this.lastOutcome = "error_detected";
-          const newVisualErrors = visualErrors.filter((err) => {
-            const normalized = err.trim();
-            if (!normalized) return false;
-            if (knownVisualErrors.has(normalized)) return false;
-            knownVisualErrors.add(normalized);
-            return true;
-          });
+        const visualSignals = await this.domMarker.getVisualSignals();
+        const hasVisualFeedback = visualErrors.length > 0 || visualSignals.length > 0;
+        if (hasVisualFeedback) {
+          const visualSignature = this.computeHash(
+            JSON.stringify({
+              visualErrors,
+              visualSignals: visualSignals.map((s) => ({
+                text: s.text,
+                role: s.role,
+                className: s.className,
+                toneHint: s.toneHint,
+              })),
+            }),
+          );
+          const visualChanged = visualSignature !== lastVisualSignature;
+          lastVisualSignature = visualSignature;
 
-          newVisualErrors.forEach((err) => {
-            this.log("error", `🚨 Visual Error Detected: ${err}`);
-            reportGen.addError("visual", err);
-          });
+            if (visualChanged) {
+            const deterministicVisualDecision =
+              this.classifyVisualStateDeterministic({
+                visualErrors,
+                visualSignals,
+              });
+            const visualDecision =
+              deterministicVisualDecision.verdict !== "neutral" ||
+              !AI_AVAILABLE
+                ? deterministicVisualDecision
+                : await this.llmProvider.classifyVisualState({
+                    goal,
+                    signals: visualSignals,
+                    previousSteps,
+                  });
 
-          if (
-            newVisualErrors.length > 0 &&
-            reportGen.getReport().stepsExecuted > 0
-          ) {
-            const stopReason = lastExecutedWasCriticalCommit
-              ? "Se detectó error visual tras acción crítica (submit/save)."
-              : "Se detectó error visual durante la ejecución.";
             if (
-              lastExecutedWasCriticalCommit ||
-              AGENT_MODE === "strict_fail_fast"
+              visualDecision.verdict === "error" &&
+              visualDecision.confidence >= 0.55
             ) {
-              this.log("error", `❌ ${stopReason}`);
-              reportGen.addError("visual", stopReason);
-              reportGen.setStatus("FAILED");
-              break;
-            } else {
-              this.log("info", `⚠️ ${stopReason} (modo balanced)`);
+              if (fillFirstStrategy && !hasSubmittedCriticalAction) {
+                this.log(
+                  "info",
+                  `⏭️ Fill-first active: postponing visual error evaluation until submit. (${visualDecision.confidence.toFixed(2)})`,
+                );
+                this.lastOutcome = isDomUnchanged ? "no_effect" : "progress";
+              } else {
+                this.lastOutcome = "error_detected";
+                const newVisualErrors = visualErrors.filter((err) => {
+                  const normalized = err.trim();
+                  if (!normalized) return false;
+                  if (knownVisualErrors.has(normalized)) return false;
+                  knownVisualErrors.add(normalized);
+                  return true;
+                });
+
+                if (newVisualErrors.length === 0) {
+                  const aiError = `[AI_VISUAL] ${visualDecision.rationale}`;
+                  if (!knownVisualErrors.has(aiError)) {
+                    knownVisualErrors.add(aiError);
+                    newVisualErrors.push(aiError);
+                  }
+                }
+
+                newVisualErrors.forEach((err) => {
+                  this.log("error", `🚨 Visual Error Detected: ${err}`);
+                  reportGen.addError("visual", err);
+                });
+
+                if (lastExecutedWasCriticalCommit) {
+                  const stopReason =
+                    "Se detectó error visual tras acción crítica (submit/save).";
+                  this.log("error", `❌ ${stopReason}`);
+                  reportGen.addError("visual", stopReason);
+                  reportGen.setStatus("FAILED");
+                  break;
+                }
+              }
+            } else if (visualDecision.verdict === "success") {
+              this.log(
+                "info",
+                `✅ Visual feedback classified as success (${visualDecision.confidence.toFixed(2)}): ${visualDecision.rationale}`,
+              );
+            } else if (visualDecision.verdict === "warning") {
+              this.log(
+                "info",
+                `⚠️ Visual feedback warning (${visualDecision.confidence.toFixed(2)}): ${visualDecision.rationale}`,
+              );
             }
           }
         } else if (reportGen.getReport().stepsExecuted > 0) {
           this.lastOutcome = isDomUnchanged ? "no_effect" : "progress";
         }
 
-        const previousSteps = reportGen.getReport().steps;
         const nextPlannedStep = plannedSteps[plannedIndex];
         const requiresReplan =
           plannedSteps.length === 0 ||
@@ -229,13 +342,16 @@ export class AgentService implements IAgent {
 
           const context = [
             `planner_mode=full_plan`,
+            `execution_strategy=${fillFirstStrategy && !hasSubmittedCriticalAction ? "fill_then_validate" : "balanced"}`,
+            `form_controls_total=${formProgress.totalControls}`,
+            `form_controls_filled=${formProgress.filledControls}`,
             `steps_executed=${reportGen.getReport().stepsExecuted}`,
             `last_outcome=${this.lastOutcome}`,
             `remaining_budget=${MAX_STEPS - reportGen.getReport().stepsExecuted}`,
           ].join("; ");
 
           const newPlan = await this.llmProvider.generateSteps(
-            `[FULL_PLAN] GOAL: ${goal}. Build an end-to-end executable map with ordered steps using provided IDs.`,
+            `${fillFirstStrategy ? "[FORM_FILL_FIRST] " : ""}[FULL_PLAN] GOAL: ${goal}. Build an end-to-end executable map with ordered steps using provided IDs.`,
             context,
             currentMarkedContext,
             previousSteps,
@@ -261,8 +377,34 @@ export class AgentService implements IAgent {
         }
 
         if (nextStep.action === "FINISH") {
-          this.log("success", "✅ Agent finished (Goal Achieved).");
-          reportGen.setStatus("COMPLETED");
+          const verification = await this.verifyFinalOutcome({
+            goal,
+            profileId,
+            beforeContext: currentMarkedContext,
+            visualErrors,
+            executedSteps: previousSteps,
+            allowAI: AI_AVAILABLE,
+          });
+          if (verification.verdict === "failure") {
+            this.log(
+              "error",
+              `❌ Final QA verdict: FAILURE (${verification.confidence.toFixed(2)}) - ${verification.rationale}`,
+            );
+            reportGen.addError("visual", verification.rationale);
+            reportGen.setStatus("FAILED");
+          } else if (verification.verdict === "inconclusive") {
+            this.log(
+              "info",
+              `⚠️ Final QA verdict: INCONCLUSIVE (${verification.confidence.toFixed(2)}) - ${verification.rationale}`,
+            );
+            reportGen.setStatus("FAILED");
+          } else {
+            this.log(
+              "success",
+              `✅ Final QA verdict: SUCCESS (${verification.confidence.toFixed(2)})`,
+            );
+            reportGen.setStatus("COMPLETED");
+          }
           break;
         }
 
@@ -328,6 +470,7 @@ export class AgentService implements IAgent {
           plannedIndex = Math.max(plannedIndex - 1, 0);
           previousContextLength = currentContextLength;
           previousContextModalFlag = currentModalFlag;
+          previousMarkedContext = markedContext;
           continue;
         } else {
           retryByStepKey.set(currentStepKey, 0);
@@ -361,6 +504,9 @@ export class AgentService implements IAgent {
           }
 
           reportGen.addStep(nextStep);
+          if (lastExecutedWasCriticalCommit) {
+            hasSubmittedCriticalAction = true;
+          }
           stepResults.push({
             stepId: nextStep.id,
             status: "success",
@@ -388,6 +534,7 @@ export class AgentService implements IAgent {
 
         previousContextLength = currentContextLength;
         previousContextModalFlag = currentModalFlag;
+        previousMarkedContext = markedContext;
       }
 
       // Cleanup
@@ -418,7 +565,7 @@ export class AgentService implements IAgent {
       this.log("info", `📊 Report generated. Status: ${finalReport.status}`);
 
       // Save to History
-      await this.saveHistory(finalReport, stepResults);
+      await this.saveHistory(finalReport, stepResults, capturedConsoleLogs);
     }
   }
 
@@ -484,6 +631,272 @@ export class AgentService implements IAgent {
     return hash.toString();
   }
 
+  private pickAdaptiveReadMode(
+    unchangedCycles: number,
+    stepsExecuted: number,
+  ): "fast" | "normal" | "complex" {
+    if (stepsExecuted === 0) return "normal";
+    if (unchangedCycles >= 2) return "complex";
+    if (unchangedCycles === 0 && stepsExecuted > 2) return "fast";
+    return "normal";
+  }
+
+  private compactContext(current: string, previous: string): string {
+    const MAX_LINES = 280;
+    const MAX_CHARS = 12000;
+
+    const currentLines = current.split("\n").filter((l) => l.trim().length > 0);
+    const previousSet = new Set(
+      previous
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean),
+    );
+
+    const changedLines = currentLines.filter((line) => !previousSet.has(line.trim()));
+    const prioritized = [...changedLines, ...currentLines].slice(0, MAX_LINES);
+    const compacted = prioritized.join("\n");
+    return compacted.length > MAX_CHARS
+      ? compacted.slice(0, MAX_CHARS) + "\n...[truncated]"
+      : compacted;
+  }
+
+  private shouldUseFillFirstStrategy(goal: string): boolean {
+    return /(form|formulario|registro|register|signup|sign up|create user|crear usuario|fill|llenar)/i.test(
+      goal,
+    );
+  }
+
+  private getFormProgress(markedContext: string): {
+    totalControls: number;
+    filledControls: number;
+  } {
+    const lines = markedContext.split("\n");
+    let totalControls = 0;
+    let filledControls = 0;
+
+    for (const rawLine of lines) {
+      const line = rawLine.toLowerCase();
+      const isControl =
+        /<input|<textarea|<select/.test(line) ||
+        /(placeholder=|type=|name=)/.test(line);
+      if (!isControl) continue;
+      totalControls++;
+
+      const valueMatch = line.match(/value="([^"]*)"/);
+      const value = (valueMatch?.[1] || "").trim();
+      const selectSelectedMatch = line.match(/selected="([^"]*)"/);
+      const selected = (selectSelectedMatch?.[1] || "").trim();
+      if (value || selected) {
+        filledControls++;
+      }
+    }
+
+    return { totalControls, filledControls };
+  }
+
+  private extractNewErrorKeywords(
+    beforeContext: string,
+    afterContext: string,
+  ): string[] {
+    const keywordRegex =
+      /\b(error|failed|invalid|required|incorrect|denied|forbidden|rechazad|invalido|incorrecto|obligatorio|fallo)\b/gi;
+    const beforeMatches = new Set(
+      Array.from(beforeContext.matchAll(keywordRegex)).map((m) =>
+        (m[0] || "").toLowerCase(),
+      ),
+    );
+    const afterMatches = Array.from(afterContext.matchAll(keywordRegex)).map((m) =>
+      (m[0] || "").toLowerCase(),
+    );
+    const newKeywords = afterMatches.filter((k) => !beforeMatches.has(k));
+    return [...new Set(newKeywords)].slice(0, 20);
+  }
+
+  private classifyVisualStateDeterministic(params: {
+    visualErrors: string[];
+    visualSignals: Array<{
+      text: string;
+      role: string;
+      className: string;
+      color: string;
+      backgroundColor: string;
+      borderColor: string;
+      ariaLive: string;
+      toneHint: "success" | "error" | "warning" | "info" | "neutral";
+    }>;
+  }): {
+    verdict: "error" | "success" | "warning" | "neutral";
+    confidence: number;
+    rationale: string;
+  } {
+    let score = 0;
+    const failureRegex =
+      /(failed|error|invalid|required|denied|timeout|degraded|fall[óo]|invalido|rechazad)/i;
+    const successRegex =
+      /(success|successful|created|saved|completed|welcome|exito|guardado|completado)/i;
+
+    if (params.visualErrors.length > 0) score += 4;
+
+    for (const s of params.visualSignals) {
+      const blob = `${s.text} ${s.className} ${s.role} ${s.ariaLive}`.toLowerCase();
+      if (s.toneHint === "error") score += 3;
+      if (s.toneHint === "success") score -= 3;
+      if (failureRegex.test(blob)) score += 3;
+      if (successRegex.test(blob)) score -= 3;
+      if (/alert/.test((s.role || "").toLowerCase()) && failureRegex.test(blob)) {
+        score += 2;
+      }
+      if (
+        /status/.test((s.role || "").toLowerCase()) &&
+        !s.text.trim() &&
+        /(spinner|loading|loader|progress)/i.test(s.className || "")
+      ) {
+        score -= 1;
+      }
+    }
+
+    if (score >= 4) {
+      return {
+        verdict: "error",
+        confidence: Math.min(0.95, 0.55 + Math.abs(score) * 0.05),
+        rationale: "Deterministic signals indicate visual error state.",
+      };
+    }
+    if (score <= -4) {
+      return {
+        verdict: "success",
+        confidence: Math.min(0.95, 0.55 + Math.abs(score) * 0.05),
+        rationale: "Deterministic signals indicate visual success state.",
+      };
+    }
+    if (score >= 2) {
+      return {
+        verdict: "warning",
+        confidence: 0.6,
+        rationale: "Deterministic signals suggest possible warning.",
+      };
+    }
+    return {
+      verdict: "neutral",
+      confidence: 0.45,
+      rationale: "Deterministic signals are weak or mixed.",
+    };
+  }
+
+  private async verifyFinalOutcome(params: {
+    goal: string;
+    profileId: string;
+    beforeContext: string;
+    visualErrors: string[];
+    executedSteps: TestStep[];
+    allowAI: boolean;
+  }): Promise<{
+    verdict: "success" | "failure" | "inconclusive";
+    confidence: number;
+    rationale: string;
+  }> {
+    this.log("thinking", "🧪 Running final QA verification...");
+    await this.domMarker.waitForDOMStability(1200);
+    await this.domMarker.markInteractiveElements(params.profileId, "complex");
+    const afterRawContext = await this.domMarker.getMarkedContext(params.profileId);
+    const afterContext = this.compactContext(afterRawContext, params.beforeContext);
+    const afterVisualErrors = await this.domMarker.detectVisualErrors();
+    const outcomeSignals = await this.domMarker.getOutcomeSignals();
+    const visualSignals = await this.domMarker.getVisualSignals();
+    const visualDecision = visualSignals.length
+      ? await this.llmProvider.classifyVisualState({
+          goal: params.goal,
+          signals: visualSignals,
+          previousSteps: params.executedSteps,
+        })
+      : { verdict: "neutral" as const, confidence: 0.5, rationale: "No visual signals." };
+
+    const newVisualErrors =
+      visualDecision.verdict === "error"
+        ? afterVisualErrors.filter((err) => !params.visualErrors.includes(err))
+        : [];
+    const newErrorKeywords = this.extractNewErrorKeywords(
+      params.beforeContext,
+      afterContext,
+    );
+    const deterministicVisual = this.classifyVisualStateDeterministic({
+      visualErrors: afterVisualErrors,
+      visualSignals,
+    });
+    const deterministicScore =
+      (newVisualErrors.length > 0 ? 3 : 0) +
+      (newErrorKeywords.length > 0 ? 3 : 0) +
+      (deterministicVisual.verdict === "error"
+        ? 3
+        : deterministicVisual.verdict === "success"
+          ? -3
+          : 0);
+    if (deterministicScore >= 4) {
+      return {
+        verdict: "failure",
+        confidence: 0.82,
+        rationale:
+          newVisualErrors[0] ||
+          deterministicVisual.rationale ||
+          "Deterministic final verification found failure signals.",
+      };
+    }
+    if (deterministicScore <= -3) {
+      return {
+        verdict: "success",
+        confidence: 0.78,
+        rationale:
+          deterministicVisual.rationale ||
+          "Deterministic final verification found success signals.",
+      };
+    }
+    if (!params.allowAI) {
+      return {
+        verdict: "inconclusive",
+        confidence: 0.5,
+        rationale: "Final deterministic verification is inconclusive (no AI fallback available).",
+      };
+    }
+
+    const finalEvalPayload = {
+      goal: params.goal,
+      beforeContextLength: params.beforeContext.length,
+      afterContextLength: afterContext.length,
+      signals: {
+        visualErrors:
+          visualDecision.verdict === "error"
+            ? [...newVisualErrors, `[AI_VISUAL] ${visualDecision.rationale}`]
+            : [],
+        outcomeSignals,
+        newErrorKeywords,
+        domChanged:
+          this.computeHash(params.beforeContext) !== this.computeHash(afterContext),
+      },
+      executedSteps: params.executedSteps.map((s) => ({
+        action: s.action,
+        targetId: s.targetId,
+        selector: s.selector,
+      })),
+      beforePreview: params.beforeContext.slice(0, 1200),
+      afterPreview: afterContext.slice(0, 1200),
+    };
+    console.debug("[RacTest][Autopilot][AI Final Eval Payload]", finalEvalPayload);
+
+    return this.llmProvider.evaluateOutcome({
+      goal: params.goal,
+      beforeContext: params.beforeContext,
+      afterContext,
+      signals: {
+        visualErrors: finalEvalPayload.signals.visualErrors,
+        outcomeSignals: finalEvalPayload.signals.outcomeSignals,
+        newErrorKeywords: finalEvalPayload.signals.newErrorKeywords,
+        domChanged: finalEvalPayload.signals.domChanged,
+      },
+      executedSteps: params.executedSteps,
+    });
+  }
+
   private extractElementMetaMap(
     markedContext: string,
   ): Map<number, { tag: string; raw: string }> {
@@ -522,9 +935,11 @@ export class AgentService implements IAgent {
 
     if (
       (step.action === "CHECK" || step.action === "UNCHECK") &&
-      tag !== "input"
+      tag !== "input" &&
+      !/role="checkbox"/.test(elementMeta?.raw || "")
     ) {
-      return `${step.action} action on non-input element <${tag}>`;
+      // Allow non-input wrappers (label/div) because execution can resolve nested checkbox/radio.
+      return null;
     }
 
     if (step.action === "SELECT" && !step.value?.trim()) {
@@ -562,31 +977,77 @@ export class AgentService implements IAgent {
 
   private inferDataTypeFromContext(
     rawContext: string,
-  ): "name" | "email" | "phone" | "address" | "company" | "date" | "lorem" {
+  ): FakeDataType {
+    if (/first.?name|nombre(?!.*apellido)/.test(rawContext)) return "firstName";
+    if (/last.?name|surname|apellido/.test(rawContext)) return "lastName";
     if (/email|e-mail|correo/.test(rawContext)) return "email";
+    if (/user(name)?|login|usuario/.test(rawContext)) return "username";
+    if (/pass(word)?|contrase/.test(rawContext)) return "password";
     if (/phone|tel|mobile|cel/.test(rawContext)) return "phone";
     if (/address|direcci/.test(rawContext)) return "address";
+    if (/city|ciudad/.test(rawContext)) return "city";
+    if (/state|province|provincia|estado/.test(rawContext)) return "state";
+    if (/zip|postal|cp|codigo postal/.test(rawContext)) return "zipCode";
+    if (/country|pais/.test(rawContext)) return "country";
     if (/company|empresa/.test(rawContext)) return "company";
+    if (/job|position|cargo|puesto/.test(rawContext)) return "jobTitle";
+    if (/website|site|url|web/.test(rawContext)) return "url";
+    if (/datetime|fecha y hora|timestamp/.test(rawContext)) return "datetime";
+    if (/hora|time/.test(rawContext)) return "time";
+    if (/amount|monto|precio|price|cost/.test(rawContext)) return "price";
+    if (/uuid|guid|folio|id unico/.test(rawContext)) return "uuid";
+    if (/color|hex/.test(rawContext)) return "color";
+    if (/cantidad|numero|number|age|edad/.test(rawContext)) return "number";
     if (/date|fecha|birth|nacimiento/.test(rawContext)) return "date";
     if (/name|nombre|first|last/.test(rawContext)) return "name";
     return "lorem";
   }
 
-  private generateFakeValue(
-    type: "name" | "email" | "phone" | "address" | "company" | "date" | "lorem",
-  ): string {
+  private generateFakeValue(type: FakeDataType): string {
     const stamp = Date.now().toString().slice(-6);
     switch (type) {
+      case "firstName":
+        return `Nombre${stamp}`;
+      case "lastName":
+        return `Apellido${stamp}`;
       case "email":
         return `ractest.${stamp}@example.com`;
+      case "username":
+        return `user_${stamp}`;
+      case "password":
+        return `Rac!${stamp}Test`;
       case "phone":
         return `55${stamp}`;
       case "address":
         return `Calle Test ${stamp}`;
+      case "city":
+        return `Ciudad ${stamp}`;
+      case "state":
+        return `Estado ${stamp}`;
+      case "zipCode":
+        return `${stamp.slice(0, 5)}`;
+      case "country":
+        return "México";
       case "company":
         return `RacTest Co ${stamp}`;
+      case "jobTitle":
+        return `QA Engineer ${stamp}`;
+      case "url":
+        return `https://example.com/${stamp}`;
       case "date":
         return new Date().toISOString().slice(0, 10);
+      case "time":
+        return "10:30";
+      case "datetime":
+        return new Date().toISOString().slice(0, 16);
+      case "number":
+        return `${Number(stamp) % 1000}`;
+      case "price":
+        return `${(Number(stamp) % 5000) + 99}.99`;
+      case "uuid":
+        return crypto.randomUUID();
+      case "color":
+        return "#3366FF";
       case "name":
         return `Tester ${stamp}`;
       default:
@@ -641,6 +1102,7 @@ export class AgentService implements IAgent {
       timestamp: number;
       message?: string;
     }>,
+    consoleLogs: ConsoleLogEntry[] = [],
   ) {
     try {
       const historyEntry: any = {
@@ -667,6 +1129,7 @@ export class AgentService implements IAgent {
           report.errors.console.length > 0 || report.errors.visual.length > 0
             ? [...report.errors.console, ...report.errors.visual].join("; ")
             : undefined,
+        consoleLogs,
       };
 
       const { storageService } = await import("../../commons/lib/storage");

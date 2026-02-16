@@ -365,17 +365,78 @@ export class ExecutionEngine {
             case "name":
               finalValue = faker.person.fullName();
               break;
+            case "firstName":
+              finalValue = faker.person.firstName();
+              break;
+            case "lastName":
+              finalValue = faker.person.lastName();
+              break;
+            case "username":
+              finalValue = faker.internet.username();
+              break;
+            case "password":
+              finalValue = faker.internet.password({
+                length: 14,
+                memorable: false,
+                pattern: /[A-Za-z0-9!@#$%]/,
+              });
+              break;
             case "phone":
               finalValue = faker.phone.number();
               break;
             case "address":
               finalValue = faker.location.streetAddress();
               break;
+            case "city":
+              finalValue = faker.location.city();
+              break;
+            case "state":
+              finalValue = faker.location.state();
+              break;
+            case "zipCode":
+              finalValue = faker.location.zipCode();
+              break;
+            case "country":
+              finalValue = faker.location.country();
+              break;
             case "company":
               finalValue = faker.company.name();
               break;
+            case "jobTitle":
+              finalValue = faker.person.jobTitle();
+              break;
+            case "url":
+              finalValue = faker.internet.url();
+              break;
             case "date":
               finalValue = faker.date.future().toLocaleDateString("es-ES");
+              break;
+            case "time":
+              finalValue = faker.date
+                .soon({ days: 1 })
+                .toLocaleTimeString("es-ES", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+              break;
+            case "datetime":
+              finalValue = faker.date.soon({ days: 30 }).toISOString();
+              break;
+            case "number":
+              finalValue = String(faker.number.int({ min: 1, max: 999999 }));
+              break;
+            case "price":
+              finalValue = faker.commerce.price({
+                min: 10,
+                max: 5000,
+                dec: 2,
+              });
+              break;
+            case "uuid":
+              finalValue = faker.string.uuid();
+              break;
+            case "color":
+              finalValue = faker.color.rgb({ format: "hex" });
               break;
             case "lorem":
               finalValue = faker.lorem.paragraph();
@@ -643,12 +704,30 @@ export class ExecutionEngine {
   }
 
   private simulateCheck(element: HTMLInputElement, checked: boolean): void {
+    const inputType = (element.type || "").toLowerCase();
+    if (inputType === "radio" && !checked) {
+      return;
+    }
+
     if (element.checked !== checked) {
-      element.checked = checked;
-      element.dispatchEvent(new Event("change", { bubbles: true }));
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      // Also click for proper event propagation
-      element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      // Prefer native click because many frameworks depend on click handlers.
+      element.click();
+
+      // Fallback when click does not update checked state.
+      if (element.checked !== checked) {
+        const checkedSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          "checked",
+        )?.set;
+
+        if (checkedSetter) {
+          checkedSetter.call(element, checked);
+        } else {
+          element.checked = checked;
+        }
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      }
     }
   }
 

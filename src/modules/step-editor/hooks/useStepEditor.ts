@@ -159,6 +159,10 @@ export const useStepEditor = () => {
 
   const handleCaptureSingle = async () => {
     setIsRecording(false);
+    if (isInspectorActive) {
+      await handleDeactivateInspector();
+      return;
+    }
     await handleActivateInspector();
   };
 

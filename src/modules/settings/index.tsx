@@ -183,6 +183,37 @@ export const SettingsView: React.FC<SettingsViewProps> = (settingsProps) => {
           </h3>
           <Card className="p-5 transition-colors bg-bg-card/40 backdrop-blur-sm border-border-default/50 hover:border-accent-primary/20">
             <div className="space-y-4">
+              <div>
+                <label className="block mb-2 text-sm font-medium text-text-secondary">
+                  {t("settings.aiTesting.label")}
+                </label>
+                <div className="flex border bg-bg-main/50 p-1.5 rounded-xl border-border-default/50">
+                  <button
+                    onClick={() => updateSetting("enableAiForTesting", true)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                      settings.enableAiForTesting !== false
+                        ? "bg-bg-card text-text-primary shadow-sm ring-1 ring-border-default/50"
+                        : "text-text-muted hover:text-text-secondary"
+                    }`}
+                  >
+                    {t("settings.aiTesting.enabled")}
+                  </button>
+                  <button
+                    onClick={() => updateSetting("enableAiForTesting", false)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                      settings.enableAiForTesting === false
+                        ? "bg-bg-card text-text-primary shadow-sm ring-1 ring-border-default/50"
+                        : "text-text-muted hover:text-text-secondary"
+                    }`}
+                  >
+                    {t("settings.aiTesting.disabled")}
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-text-muted">
+                  {t("settings.aiTesting.helper")}
+                </p>
+              </div>
+
               <Input
                 label={t("settings.apiKey.label")}
                 type="password"

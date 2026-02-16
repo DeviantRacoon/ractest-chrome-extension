@@ -54,6 +54,22 @@
 
   let currentMode = "fast";
 
+  function sanitizeAttrValue(value) {
+    return String(value || "")
+      .replace(/"/g, "")
+      .replace(/\|/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function normalizeText(value) {
+    return String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
   window.RAC_SOM.markElements = function (mode = "fast") {
     currentMode = mode;
     window.RAC_SOM.unmarkElements(); // Clean up first
@@ -233,7 +249,18 @@
         if (tag === "input") {
           text = `placeholder="${el.placeholder || ""}" value="${el.value || ""}" type="${el.type}" name="${el.name || ""}"`;
         } else if (tag === "select") {
-          text = `name="${el.name || ""}" selected="${el.options[el.selectedIndex]?.text || ""}"`;
+          const values = [];
+          const labels = [];
+          Array.from(el.options || []).forEach((opt) => {
+            values.push(sanitizeAttrValue(opt.value || ""));
+            labels.push(sanitizeAttrValue(opt.text || ""));
+          });
+          text =
+            `name="${sanitizeAttrValue(el.name || "")}" ` +
+            `selected="${sanitizeAttrValue(el.options[el.selectedIndex]?.text || "")}" ` +
+            `selected-value="${sanitizeAttrValue(el.value || "")}" ` +
+            `select-values="${values.join("|")}" ` +
+            `select-labels="${labels.join("|")}"`;
         } else {
           // Safe text extraction
           const rawText = el.innerText || el.textContent || "";
@@ -301,6 +328,142 @@
 
     // Deduplicate
     return [...new Set(errors)];
+  };
+
+  window.RAC_SOM.getOutcomeSignals = function () {
+    const signals = [];
+    const pushSignal = (prefix, value) => {
+      const safe = String(value || "")
+        .replace(/[\n\r]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!safe) return;
+      signals.push(`${prefix} ${safe}`.slice(0, 180));
+    };
+
+    // Strong accessibility/state indicators
+    const invalidNodes = document.querySelectorAll(
+      '[aria-invalid="true"], [aria-live="assertive"]',
+    );
+    invalidNodes.forEach((el) => {
+      if (el.offsetParent === null) return;
+      pushSignal("[ARIA_INVALID]", el.innerText || el.getAttribute("aria-label"));
+    });
+
+    // Explicit error role
+    document.querySelectorAll('[role="alert"]').forEach((el) => {
+      if (el.offsetParent === null) return;
+      pushSignal("[ROLE_ALERT]", el.innerText);
+    });
+
+    // Error keywords in visible small blocks
+    const keywordRegex =
+      /(error|failed|invalid|required|incorrect|denied|forbidden|rechazad|invalido|incorrecto|obligatorio|fallo)/i;
+    const blocks = Array.from(
+      document.querySelectorAll("p, span, div, li, small, strong"),
+    ).slice(0, 400);
+    blocks.forEach((el) => {
+      if (el.offsetParent === null) return;
+      const text = (el.innerText || "").trim();
+      if (!text || text.length < 3 || text.length > 140) return;
+      if (keywordRegex.test(text)) {
+        pushSignal("[KEYWORD]", text);
+      }
+    });
+
+    // Red-like styles as weak signal (never deterministic by itself)
+    const redNodes = Array.from(
+      document.querySelectorAll(
+        '[class*="error"], [class*="danger"], [class*="invalid"]',
+      ),
+    ).slice(0, 120);
+    redNodes.forEach((el) => {
+      if (el.offsetParent === null) return;
+      const style = window.getComputedStyle(el);
+      const color = `${style.color || ""} ${style.backgroundColor || ""}`;
+      if (/rgb\((1[5-9]\d|2[0-5]\d),\s?\d{1,3},\s?\d{1,3}\)/.test(color)) {
+        pushSignal("[RED_HINT]", el.innerText || el.getAttribute("class"));
+      }
+    });
+
+    return [...new Set(signals)].slice(0, 50);
+  };
+
+  window.RAC_SOM.getVisualSignals = function () {
+    const selectors = [
+      '[role="alert"]',
+      '[role="status"]',
+      '[aria-live]',
+      ".alert",
+      ".toast",
+      ".notification",
+      ".error",
+      ".success",
+      ".warning",
+    ];
+
+    const nodes = Array.from(document.querySelectorAll(selectors.join(","))).slice(
+      0,
+      80,
+    );
+
+    const inferToneHint = (el, text, cls) => {
+      const combined = `${text} ${cls}`.toLowerCase();
+      if (
+        /(success|successful|saved|created|welcome|done|completed|exito|exitos|guardad|completad)/.test(
+          combined,
+        )
+      ) {
+        return "success";
+      }
+      if (
+        /(error|failed|invalid|required|denied|forbidden|fallo|invalido|incorrecto|rechazad)/.test(
+          combined,
+        )
+      ) {
+        return "error";
+      }
+      if (/(warn|warning|caution|precaucion|advertencia)/.test(combined)) {
+        return "warning";
+      }
+      if (/(info|notice|informacion|aviso)/.test(combined)) {
+        return "info";
+      }
+      return "neutral";
+    };
+
+    const toSignal = (el) => {
+      if (el.offsetParent === null) return null;
+      const style = window.getComputedStyle(el);
+      const text = (el.innerText || el.textContent || "")
+        .replace(/[\n\r]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 220);
+      const className = String(el.className || "").slice(0, 180);
+      const role = String(el.getAttribute("role") || "");
+      const ariaLive = String(el.getAttribute("aria-live") || "");
+      if (!text && !className && !role) return null;
+      return {
+        text,
+        role,
+        className,
+        color: style.color || "",
+        backgroundColor: style.backgroundColor || "",
+        borderColor: style.borderColor || "",
+        ariaLive,
+        toneHint: inferToneHint(el, text, className),
+      };
+    };
+
+    const signals = nodes.map(toSignal).filter(Boolean);
+    const dedup = new Map();
+    signals.forEach((s) => {
+      const key = `${s.role}|${s.className}|${s.text}`;
+      if (!dedup.has(key)) dedup.set(key, s);
+    });
+
+    return Array.from(dedup.values()).slice(0, 30);
   };
 
   window.RAC_SOM.unmarkElements = function () {
@@ -415,6 +578,111 @@
       }
     } else if (action === "HOVER") {
       el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    } else if (action === "SELECT") {
+      if (el.tagName.toLowerCase() !== "select") {
+        throw new Error(
+          `SELECT action requires <select>, found <${el.tagName.toLowerCase()}>`,
+        );
+      }
+
+      const selectEl = el;
+      const requested = String(value || "").trim();
+      if (!requested) {
+        throw new Error("SELECT action missing value");
+      }
+
+      const options = Array.from(selectEl.options || []);
+      const hasExactValue = options.some((opt) => opt.value === requested);
+
+      if (hasExactValue) {
+        selectEl.value = requested;
+      } else {
+        // Fallback: if model returned visible label, map label -> value
+        const requestedNorm = normalizeText(requested);
+        const matchedOption = options.find(
+          (opt) => normalizeText(opt.text) === requestedNorm,
+        );
+        if (!matchedOption) {
+          throw new Error(
+            `SELECT value "${requested}" not found in available option values`,
+          );
+        }
+        selectEl.value = matchedOption.value;
+      }
+
+      selectEl.dispatchEvent(new Event("input", { bubbles: true }));
+      selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+    } else if (action === "CHECK" || action === "UNCHECK") {
+      const shouldCheck = action === "CHECK";
+      const tag = el.tagName.toLowerCase();
+      const role = (el.getAttribute("role") || "").toLowerCase();
+
+      let targetInput = null;
+      if (tag === "input") {
+        targetInput = el;
+      } else if (tag === "label") {
+        const forId = el.getAttribute("for");
+        if (forId) {
+          const fromFor = document.getElementById(forId);
+          if (fromFor && fromFor.tagName.toLowerCase() === "input") {
+            targetInput = fromFor;
+          }
+        }
+        if (!targetInput) {
+          targetInput =
+            el.querySelector?.('input[type="checkbox"], input[type="radio"]') ||
+            null;
+        }
+      } else {
+        targetInput =
+          el.querySelector?.('input[type="checkbox"], input[type="radio"]') ||
+          null;
+      }
+
+      if (targetInput) {
+        const inputType = (targetInput.type || "").toLowerCase();
+        if (inputType !== "checkbox" && inputType !== "radio") {
+          throw new Error(
+            `${action} requires checkbox/radio input, found input type "${inputType}"`,
+          );
+        }
+
+        if (inputType === "radio" && !shouldCheck) {
+          // Radios cannot be unchecked by user interaction once selected.
+          return;
+        }
+
+        if (targetInput.checked !== shouldCheck) {
+          // Prefer native click because many frameworks bind behavior there.
+          targetInput.click();
+
+          // Fallback for custom widgets that block click/default toggle.
+          if (targetInput.checked !== shouldCheck) {
+            const checkedSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLInputElement.prototype,
+              "checked",
+            )?.set;
+
+            if (checkedSetter) {
+              checkedSetter.call(targetInput, shouldCheck);
+            } else {
+              targetInput.checked = shouldCheck;
+            }
+            targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+            targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }
+      } else if (role === "checkbox") {
+        const isChecked = el.getAttribute("aria-checked") === "true";
+        if (isChecked !== shouldCheck) {
+          el.click?.();
+          el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        }
+      } else {
+        throw new Error(
+          `${action} requires an input[type=checkbox|radio] or role="checkbox", found <${tag}>`,
+        );
+      }
     } else if (action === "ASSERT") {
       // ASSERT logic: Check if element value/text matches expected value
       // If value is '*', just check existence (already done by getElement)
