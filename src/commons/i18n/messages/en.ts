@@ -182,6 +182,7 @@ const en = {
   "stepEditor.openUrl": "Open URL in new tab",
   "stepEditor.save": "Save",
   "stepEditor.capture": "Capture",
+  "stepEditor.captureStop": "Stop Capture",
   "stepEditor.section": "Section",
   "stepEditor.aiMagic": "AI Magic",
   "stepEditor.aiNeedApiKey": "Set your API Key to use AI Magic",

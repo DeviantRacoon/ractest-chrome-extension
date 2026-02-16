@@ -38,7 +38,7 @@ export class OpenRouterAdapter implements ILLMProvider {
             "selector": "optional backup selector",
             "value": "optional string",
             "useFakeData": boolean,
-            "fakeDataType": "email" | "name" | "phone" | "address" | "company" | "date" | "lorem",
+            "fakeDataType": "name" | "firstName" | "lastName" | "email" | "username" | "password" | "phone" | "address" | "city" | "state" | "zipCode" | "country" | "company" | "jobTitle" | "url" | "date" | "time" | "datetime" | "number" | "price" | "uuid" | "color" | "lorem",
             "expectedOutcome": "short expected test result",
             "stopOnFailure": true
           }
@@ -53,7 +53,7 @@ export class OpenRouterAdapter implements ILLMProvider {
           "selector": "optional backup selector",
           "value": "optional string",
           "useFakeData": boolean,
-          "fakeDataType": "email" | "name" | "phone" | "address" | "company" | "date" | "lorem",
+          "fakeDataType": "name" | "firstName" | "lastName" | "email" | "username" | "password" | "phone" | "address" | "city" | "state" | "zipCode" | "country" | "company" | "jobTitle" | "url" | "date" | "time" | "datetime" | "number" | "price" | "uuid" | "color" | "lorem",
           "expectedOutcome": "short expected test result",
           "stopOnFailure": true
         }

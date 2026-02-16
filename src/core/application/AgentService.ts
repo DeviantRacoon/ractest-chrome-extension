@@ -5,7 +5,7 @@ import type {
   IInspector,
   ILLMProvider,
 } from "../domain/interfaces";
-import type { TestStep } from "../../commons/types";
+import type { FakeDataType, TestStep } from "../../commons/types";
 import { ReportGenerator } from "./ReportGenerator";
 
 export class AgentService implements IAgent {
@@ -522,9 +522,11 @@ export class AgentService implements IAgent {
 
     if (
       (step.action === "CHECK" || step.action === "UNCHECK") &&
-      tag !== "input"
+      tag !== "input" &&
+      !/role="checkbox"/.test(elementMeta?.raw || "")
     ) {
-      return `${step.action} action on non-input element <${tag}>`;
+      // Allow non-input wrappers (label/div) because execution can resolve nested checkbox/radio.
+      return null;
     }
 
     if (step.action === "SELECT" && !step.value?.trim()) {
@@ -562,31 +564,77 @@ export class AgentService implements IAgent {
 
   private inferDataTypeFromContext(
     rawContext: string,
-  ): "name" | "email" | "phone" | "address" | "company" | "date" | "lorem" {
+  ): FakeDataType {
+    if (/first.?name|nombre(?!.*apellido)/.test(rawContext)) return "firstName";
+    if (/last.?name|surname|apellido/.test(rawContext)) return "lastName";
     if (/email|e-mail|correo/.test(rawContext)) return "email";
+    if (/user(name)?|login|usuario/.test(rawContext)) return "username";
+    if (/pass(word)?|contrase/.test(rawContext)) return "password";
     if (/phone|tel|mobile|cel/.test(rawContext)) return "phone";
     if (/address|direcci/.test(rawContext)) return "address";
+    if (/city|ciudad/.test(rawContext)) return "city";
+    if (/state|province|provincia|estado/.test(rawContext)) return "state";
+    if (/zip|postal|cp|codigo postal/.test(rawContext)) return "zipCode";
+    if (/country|pais/.test(rawContext)) return "country";
     if (/company|empresa/.test(rawContext)) return "company";
+    if (/job|position|cargo|puesto/.test(rawContext)) return "jobTitle";
+    if (/website|site|url|web/.test(rawContext)) return "url";
+    if (/datetime|fecha y hora|timestamp/.test(rawContext)) return "datetime";
+    if (/hora|time/.test(rawContext)) return "time";
+    if (/amount|monto|precio|price|cost/.test(rawContext)) return "price";
+    if (/uuid|guid|folio|id unico/.test(rawContext)) return "uuid";
+    if (/color|hex/.test(rawContext)) return "color";
+    if (/cantidad|numero|number|age|edad/.test(rawContext)) return "number";
     if (/date|fecha|birth|nacimiento/.test(rawContext)) return "date";
     if (/name|nombre|first|last/.test(rawContext)) return "name";
     return "lorem";
   }
 
-  private generateFakeValue(
-    type: "name" | "email" | "phone" | "address" | "company" | "date" | "lorem",
-  ): string {
+  private generateFakeValue(type: FakeDataType): string {
     const stamp = Date.now().toString().slice(-6);
     switch (type) {
+      case "firstName":
+        return `Nombre${stamp}`;
+      case "lastName":
+        return `Apellido${stamp}`;
       case "email":
         return `ractest.${stamp}@example.com`;
+      case "username":
+        return `user_${stamp}`;
+      case "password":
+        return `Rac!${stamp}Test`;
       case "phone":
         return `55${stamp}`;
       case "address":
         return `Calle Test ${stamp}`;
+      case "city":
+        return `Ciudad ${stamp}`;
+      case "state":
+        return `Estado ${stamp}`;
+      case "zipCode":
+        return `${stamp.slice(0, 5)}`;
+      case "country":
+        return "México";
       case "company":
         return `RacTest Co ${stamp}`;
+      case "jobTitle":
+        return `QA Engineer ${stamp}`;
+      case "url":
+        return `https://example.com/${stamp}`;
       case "date":
         return new Date().toISOString().slice(0, 10);
+      case "time":
+        return "10:30";
+      case "datetime":
+        return new Date().toISOString().slice(0, 16);
+      case "number":
+        return `${Number(stamp) % 1000}`;
+      case "price":
+        return `${(Number(stamp) % 5000) + 99}.99`;
+      case "uuid":
+        return crypto.randomUUID();
+      case "color":
+        return "#3366FF";
       case "name":
         return `Tester ${stamp}`;
       default:

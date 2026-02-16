@@ -78,7 +78,14 @@ export class ChromeDOMMarker implements IDOMMarker {
   async executeActionOnMarkedElement(
     _profileId: string,
     elementId: number,
-    action: "CLICK" | "TYPE" | "SELECT" | "HOVER" | "ASSERT",
+    action:
+      | "CLICK"
+      | "TYPE"
+      | "SELECT"
+      | "CHECK"
+      | "UNCHECK"
+      | "HOVER"
+      | "ASSERT",
     value?: string,
   ): Promise<void> {
     const tabId = await getActiveTabId();
