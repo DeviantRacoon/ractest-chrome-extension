@@ -182,6 +182,7 @@ const es = {
   "stepEditor.openUrl": "Abrir URL en nueva pestaña",
   "stepEditor.save": "Guardar",
   "stepEditor.capture": "Capturar",
+  "stepEditor.captureStop": "Detener Captura",
   "stepEditor.section": "Sección",
   "stepEditor.aiMagic": "AI Magic",
   "stepEditor.aiNeedApiKey": "Configura tu API Key para usar AI Magic",

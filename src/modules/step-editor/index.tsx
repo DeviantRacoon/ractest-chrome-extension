@@ -177,7 +177,6 @@ export const StepEditorView: React.FC<StepEditorViewProps> = ({
             variant="secondary"
             size="sm"
             onClick={handleCaptureSingle}
-            disabled={isInspectorActive}
             className={`whitespace-nowrap text-xs border border-border-default hover:border-accent-primary/50 text-text-primary px-3 shadow-sm ${
               isInspectorActive
                 ? "ring-2 ring-accent-primary border-accent-primary bg-accent-primary/10 text-accent-primary"
@@ -185,7 +184,9 @@ export const StepEditorView: React.FC<StepEditorViewProps> = ({
             }`}
           >
             <MousePointer className="w-3.5 h-3.5 mr-2" />
-            {t("stepEditor.capture")}
+            {isInspectorActive
+              ? t("stepEditor.captureStop")
+              : t("stepEditor.capture")}
           </Button>
 
           <Button

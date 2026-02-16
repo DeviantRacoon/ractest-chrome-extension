@@ -29,7 +29,14 @@ export interface IDOMMarker {
   executeActionOnMarkedElement(
     profileId: string,
     elementId: number,
-    action: "CLICK" | "TYPE" | "SELECT" | "HOVER" | "ASSERT",
+    action:
+      | "CLICK"
+      | "TYPE"
+      | "SELECT"
+      | "CHECK"
+      | "UNCHECK"
+      | "HOVER"
+      | "ASSERT",
     value?: string,
   ): Promise<void>;
 }

@@ -25,11 +25,27 @@ export interface TestStep {
   useFakeData?: boolean;
   fakeDataType?:
     | "name"
+    | "firstName"
+    | "lastName"
     | "email"
+    | "username"
+    | "password"
     | "phone"
     | "address"
+    | "city"
+    | "state"
+    | "zipCode"
+    | "country"
     | "company"
+    | "jobTitle"
+    | "url"
     | "date"
+    | "time"
+    | "datetime"
+    | "number"
+    | "price"
+    | "uuid"
+    | "color"
     | "lorem";
   delay: number; // milliseconds
   order: number;
@@ -38,11 +54,27 @@ export interface TestStep {
 
 export type FakeDataType =
   | "name"
+  | "firstName"
+  | "lastName"
   | "email"
+  | "username"
+  | "password"
   | "phone"
   | "address"
+  | "city"
+  | "state"
+  | "zipCode"
+  | "country"
   | "company"
+  | "jobTitle"
+  | "url"
   | "date"
+  | "time"
+  | "datetime"
+  | "number"
+  | "price"
+  | "uuid"
+  | "color"
   | "lorem";
 
 /**

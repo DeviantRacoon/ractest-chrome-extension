@@ -54,6 +54,22 @@
 
   let currentMode = "fast";
 
+  function sanitizeAttrValue(value) {
+    return String(value || "")
+      .replace(/"/g, "")
+      .replace(/\|/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function normalizeText(value) {
+    return String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
   window.RAC_SOM.markElements = function (mode = "fast") {
     currentMode = mode;
     window.RAC_SOM.unmarkElements(); // Clean up first
@@ -233,7 +249,18 @@
         if (tag === "input") {
           text = `placeholder="${el.placeholder || ""}" value="${el.value || ""}" type="${el.type}" name="${el.name || ""}"`;
         } else if (tag === "select") {
-          text = `name="${el.name || ""}" selected="${el.options[el.selectedIndex]?.text || ""}"`;
+          const values = [];
+          const labels = [];
+          Array.from(el.options || []).forEach((opt) => {
+            values.push(sanitizeAttrValue(opt.value || ""));
+            labels.push(sanitizeAttrValue(opt.text || ""));
+          });
+          text =
+            `name="${sanitizeAttrValue(el.name || "")}" ` +
+            `selected="${sanitizeAttrValue(el.options[el.selectedIndex]?.text || "")}" ` +
+            `selected-value="${sanitizeAttrValue(el.value || "")}" ` +
+            `select-values="${values.join("|")}" ` +
+            `select-labels="${labels.join("|")}"`;
         } else {
           // Safe text extraction
           const rawText = el.innerText || el.textContent || "";
@@ -415,6 +442,111 @@
       }
     } else if (action === "HOVER") {
       el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    } else if (action === "SELECT") {
+      if (el.tagName.toLowerCase() !== "select") {
+        throw new Error(
+          `SELECT action requires <select>, found <${el.tagName.toLowerCase()}>`,
+        );
+      }
+
+      const selectEl = el;
+      const requested = String(value || "").trim();
+      if (!requested) {
+        throw new Error("SELECT action missing value");
+      }
+
+      const options = Array.from(selectEl.options || []);
+      const hasExactValue = options.some((opt) => opt.value === requested);
+
+      if (hasExactValue) {
+        selectEl.value = requested;
+      } else {
+        // Fallback: if model returned visible label, map label -> value
+        const requestedNorm = normalizeText(requested);
+        const matchedOption = options.find(
+          (opt) => normalizeText(opt.text) === requestedNorm,
+        );
+        if (!matchedOption) {
+          throw new Error(
+            `SELECT value "${requested}" not found in available option values`,
+          );
+        }
+        selectEl.value = matchedOption.value;
+      }
+
+      selectEl.dispatchEvent(new Event("input", { bubbles: true }));
+      selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+    } else if (action === "CHECK" || action === "UNCHECK") {
+      const shouldCheck = action === "CHECK";
+      const tag = el.tagName.toLowerCase();
+      const role = (el.getAttribute("role") || "").toLowerCase();
+
+      let targetInput = null;
+      if (tag === "input") {
+        targetInput = el;
+      } else if (tag === "label") {
+        const forId = el.getAttribute("for");
+        if (forId) {
+          const fromFor = document.getElementById(forId);
+          if (fromFor && fromFor.tagName.toLowerCase() === "input") {
+            targetInput = fromFor;
+          }
+        }
+        if (!targetInput) {
+          targetInput =
+            el.querySelector?.('input[type="checkbox"], input[type="radio"]') ||
+            null;
+        }
+      } else {
+        targetInput =
+          el.querySelector?.('input[type="checkbox"], input[type="radio"]') ||
+          null;
+      }
+
+      if (targetInput) {
+        const inputType = (targetInput.type || "").toLowerCase();
+        if (inputType !== "checkbox" && inputType !== "radio") {
+          throw new Error(
+            `${action} requires checkbox/radio input, found input type "${inputType}"`,
+          );
+        }
+
+        if (inputType === "radio" && !shouldCheck) {
+          // Radios cannot be unchecked by user interaction once selected.
+          return;
+        }
+
+        if (targetInput.checked !== shouldCheck) {
+          // Prefer native click because many frameworks bind behavior there.
+          targetInput.click();
+
+          // Fallback for custom widgets that block click/default toggle.
+          if (targetInput.checked !== shouldCheck) {
+            const checkedSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLInputElement.prototype,
+              "checked",
+            )?.set;
+
+            if (checkedSetter) {
+              checkedSetter.call(targetInput, shouldCheck);
+            } else {
+              targetInput.checked = shouldCheck;
+            }
+            targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+            targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }
+      } else if (role === "checkbox") {
+        const isChecked = el.getAttribute("aria-checked") === "true";
+        if (isChecked !== shouldCheck) {
+          el.click?.();
+          el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        }
+      } else {
+        throw new Error(
+          `${action} requires an input[type=checkbox|radio] or role="checkbox", found <${tag}>`,
+        );
+      }
     } else if (action === "ASSERT") {
       // ASSERT logic: Check if element value/text matches expected value
       // If value is '*', just check existence (already done by getElement)

@@ -90,44 +90,29 @@ export class OverlaySystem {
 
     if (!this.overlay || !this.tooltip) return;
 
-    // Position overlay
-    // Scroll element into view if needed
-    element.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-      inline: "center",
-    });
+    const rect = element.getBoundingClientRect();
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
 
-    // Update position after a small delay to account for scrolling
-    setTimeout(() => {
-      if (!this.overlay) return;
+    this.overlay.style.top = `${rect.top + scrollTop}px`;
+    this.overlay.style.left = `${rect.left + scrollLeft}px`;
+    this.overlay.style.width = `${rect.width}px`;
+    this.overlay.style.height = `${rect.height}px`;
+    this.overlay.style.display = "block";
 
-      const updatedRect = element.getBoundingClientRect();
-      const updatedScrollTop =
-        window.pageYOffset || document.documentElement.scrollTop;
-      const updatedScrollLeft =
-        window.pageXOffset || document.documentElement.scrollLeft;
+    if (this.tooltip && selectorText) {
+      this.tooltip.textContent = selectorText;
+      this.tooltip.style.top = `${rect.top + scrollTop - 30}px`;
+      this.tooltip.style.left = `${rect.left + scrollLeft}px`;
+      this.tooltip.style.display = "block";
+    }
 
-      this.overlay.style.top = `${updatedRect.top + updatedScrollTop}px`;
-      this.overlay.style.left = `${updatedRect.left + updatedScrollLeft}px`;
-      this.overlay.style.width = `${updatedRect.width}px`;
-      this.overlay.style.height = `${updatedRect.height}px`;
-      this.overlay.style.display = "block";
-
-      if (this.tooltip && selectorText) {
-        this.tooltip.textContent = selectorText;
-        this.tooltip.style.top = `${updatedRect.top + updatedScrollTop - 30}px`;
-        this.tooltip.style.left = `${updatedRect.left + updatedScrollLeft}px`;
-        this.tooltip.style.display = "block";
-      }
-
-      // Set auto-hide timeout if duration is provided
-      if (duration && duration > 0) {
-        this.hideTimeout = setTimeout(() => {
-          this.hide();
-        }, duration);
-      }
-    }, 100);
+    // Set auto-hide timeout if duration is provided
+    if (duration && duration > 0) {
+      this.hideTimeout = setTimeout(() => {
+        this.hide();
+      }, duration);
+    }
   }
 
   /**
