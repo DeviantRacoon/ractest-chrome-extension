@@ -141,6 +141,8 @@ export class AgentService implements IAgent {
     // Fetch configuration (Autopilot now uses a single adaptive pipeline)
     const { storageService } = await import("../../commons/lib/storage");
     const settings = await storageService.getSettings();
+    const AI_AVAILABLE =
+      settings.enableAiForTesting !== false && !!settings.openRouterApiKey;
     const MAX_STEPS = settings.agentMaxSteps || 20;
     const MAX_RETRIES_NON_CRITICAL =
       settings.maxRetriesNonCritical !== undefined
@@ -235,12 +237,21 @@ export class AgentService implements IAgent {
           const visualChanged = visualSignature !== lastVisualSignature;
           lastVisualSignature = visualSignature;
 
-          if (visualChanged) {
-            const visualDecision = await this.llmProvider.classifyVisualState({
-              goal,
-              signals: visualSignals,
-              previousSteps,
-            });
+            if (visualChanged) {
+            const deterministicVisualDecision =
+              this.classifyVisualStateDeterministic({
+                visualErrors,
+                visualSignals,
+              });
+            const visualDecision =
+              deterministicVisualDecision.verdict !== "neutral" ||
+              !AI_AVAILABLE
+                ? deterministicVisualDecision
+                : await this.llmProvider.classifyVisualState({
+                    goal,
+                    signals: visualSignals,
+                    previousSteps,
+                  });
 
             if (
               visualDecision.verdict === "error" &&
@@ -372,6 +383,7 @@ export class AgentService implements IAgent {
             beforeContext: currentMarkedContext,
             visualErrors,
             executedSteps: previousSteps,
+            allowAI: AI_AVAILABLE,
           });
           if (verification.verdict === "failure") {
             this.log(
@@ -701,12 +713,84 @@ export class AgentService implements IAgent {
     return [...new Set(newKeywords)].slice(0, 20);
   }
 
+  private classifyVisualStateDeterministic(params: {
+    visualErrors: string[];
+    visualSignals: Array<{
+      text: string;
+      role: string;
+      className: string;
+      color: string;
+      backgroundColor: string;
+      borderColor: string;
+      ariaLive: string;
+      toneHint: "success" | "error" | "warning" | "info" | "neutral";
+    }>;
+  }): {
+    verdict: "error" | "success" | "warning" | "neutral";
+    confidence: number;
+    rationale: string;
+  } {
+    let score = 0;
+    const failureRegex =
+      /(failed|error|invalid|required|denied|timeout|degraded|fall[óo]|invalido|rechazad)/i;
+    const successRegex =
+      /(success|successful|created|saved|completed|welcome|exito|guardado|completado)/i;
+
+    if (params.visualErrors.length > 0) score += 4;
+
+    for (const s of params.visualSignals) {
+      const blob = `${s.text} ${s.className} ${s.role} ${s.ariaLive}`.toLowerCase();
+      if (s.toneHint === "error") score += 3;
+      if (s.toneHint === "success") score -= 3;
+      if (failureRegex.test(blob)) score += 3;
+      if (successRegex.test(blob)) score -= 3;
+      if (/alert/.test((s.role || "").toLowerCase()) && failureRegex.test(blob)) {
+        score += 2;
+      }
+      if (
+        /status/.test((s.role || "").toLowerCase()) &&
+        !s.text.trim() &&
+        /(spinner|loading|loader|progress)/i.test(s.className || "")
+      ) {
+        score -= 1;
+      }
+    }
+
+    if (score >= 4) {
+      return {
+        verdict: "error",
+        confidence: Math.min(0.95, 0.55 + Math.abs(score) * 0.05),
+        rationale: "Deterministic signals indicate visual error state.",
+      };
+    }
+    if (score <= -4) {
+      return {
+        verdict: "success",
+        confidence: Math.min(0.95, 0.55 + Math.abs(score) * 0.05),
+        rationale: "Deterministic signals indicate visual success state.",
+      };
+    }
+    if (score >= 2) {
+      return {
+        verdict: "warning",
+        confidence: 0.6,
+        rationale: "Deterministic signals suggest possible warning.",
+      };
+    }
+    return {
+      verdict: "neutral",
+      confidence: 0.45,
+      rationale: "Deterministic signals are weak or mixed.",
+    };
+  }
+
   private async verifyFinalOutcome(params: {
     goal: string;
     profileId: string;
     beforeContext: string;
     visualErrors: string[];
     executedSteps: TestStep[];
+    allowAI: boolean;
   }): Promise<{
     verdict: "success" | "failure" | "inconclusive";
     confidence: number;
@@ -736,6 +820,45 @@ export class AgentService implements IAgent {
       params.beforeContext,
       afterContext,
     );
+    const deterministicVisual = this.classifyVisualStateDeterministic({
+      visualErrors: afterVisualErrors,
+      visualSignals,
+    });
+    const deterministicScore =
+      (newVisualErrors.length > 0 ? 3 : 0) +
+      (newErrorKeywords.length > 0 ? 3 : 0) +
+      (deterministicVisual.verdict === "error"
+        ? 3
+        : deterministicVisual.verdict === "success"
+          ? -3
+          : 0);
+    if (deterministicScore >= 4) {
+      return {
+        verdict: "failure",
+        confidence: 0.82,
+        rationale:
+          newVisualErrors[0] ||
+          deterministicVisual.rationale ||
+          "Deterministic final verification found failure signals.",
+      };
+    }
+    if (deterministicScore <= -3) {
+      return {
+        verdict: "success",
+        confidence: 0.78,
+        rationale:
+          deterministicVisual.rationale ||
+          "Deterministic final verification found success signals.",
+      };
+    }
+    if (!params.allowAI) {
+      return {
+        verdict: "inconclusive",
+        confidence: 0.5,
+        rationale: "Final deterministic verification is inconclusive (no AI fallback available).",
+      };
+    }
+
     const finalEvalPayload = {
       goal: params.goal,
       beforeContextLength: params.beforeContext.length,

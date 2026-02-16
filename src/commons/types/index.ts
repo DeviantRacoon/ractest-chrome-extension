@@ -176,6 +176,7 @@ export interface UserSettings {
   language: AppLanguagePreference; // UI language preference
   highlightColor: string; // inspector highlight color
   notificationsEnabled: boolean; // show browser notifications
+  enableAiForTesting?: boolean; // Enable AI assistance during test execution
   openRouterApiKey?: string; // API Key for AI features
   aiModel?: string; // Selected AI Model
   aiMaxTokens?: number; // Max tokens to generate

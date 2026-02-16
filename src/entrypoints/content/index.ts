@@ -7,6 +7,10 @@ import type { PopupToContentMessage } from "../../commons/types/messages";
 import { ExecutionEngine } from "../../modules/execution/services/ExecutionEngine";
 import { Inspector } from "../../modules/inspector/services/Inspector";
 import { injectErrorCapture } from "../../modules/monitoring/services/ErrorCapture";
+import {
+  computeAccessibleDescription,
+  computeAccessibleName,
+} from "dom-accessibility-api";
 
 // Create singleton instances
 const inspector = new Inspector();
@@ -42,6 +46,75 @@ function collectAutomationFeedback() {
     return rect.width > 0 && rect.height > 0;
   };
 
+  const getAssociatedLabelText = (el: HTMLElement): string => {
+    const id = el.getAttribute("id");
+    if (id) {
+      const forLabel = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+      if (forLabel && isVisible(forLabel)) {
+        const txt = (forLabel.textContent || "").replace(/\s+/g, " ").trim();
+        if (txt) return txt;
+      }
+    }
+    const parentLabel = el.closest("label");
+    if (parentLabel && isVisible(parentLabel)) {
+      const txt = (parentLabel.textContent || "").replace(/\s+/g, " ").trim();
+      if (txt) return txt;
+    }
+    return "";
+  };
+
+  const getAriaDescription = (el: HTMLElement): string => {
+    const ids = (el.getAttribute("aria-describedby") || "")
+      .split(/\s+/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (!ids.length) return "";
+    const parts = ids
+      .map((id) => document.getElementById(id))
+      .filter((n): n is HTMLElement => !!n)
+      .filter((n) => isVisible(n))
+      .map((n) => (n.innerText || n.textContent || "").replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    return parts.join(" ").slice(0, 240);
+  };
+
+  const getAccessibleName = (el: HTMLElement): string => {
+    try {
+      const computed = computeAccessibleName(el);
+      if (computed && computed.trim()) return computed.trim().slice(0, 200);
+    } catch {}
+    const ariaLabel = (el.getAttribute("aria-label") || "").trim();
+    if (ariaLabel) return ariaLabel.slice(0, 200);
+    const labelledBy = (el.getAttribute("aria-labelledby") || "")
+      .split(/\s+/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (labelledBy.length) {
+      const txt = labelledBy
+        .map((id) => document.getElementById(id))
+        .filter((n): n is HTMLElement => !!n)
+        .map((n) => (n.innerText || n.textContent || "").replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .join(" ");
+      if (txt) return txt.slice(0, 200);
+    }
+    const label = getAssociatedLabelText(el);
+    if (label) return label.slice(0, 200);
+    const title = (el.getAttribute("title") || "").trim();
+    if (title) return title.slice(0, 200);
+    const placeholder = (el.getAttribute("placeholder") || "").trim();
+    if (placeholder) return placeholder.slice(0, 200);
+    return "";
+  };
+
+  const getAccessibleDescription = (el: HTMLElement): string => {
+    try {
+      const computed = computeAccessibleDescription(el);
+      if (computed && computed.trim()) return computed.trim().slice(0, 240);
+    } catch {}
+    return getAriaDescription(el);
+  };
+
   const feedbackItems = Array.from(document.querySelectorAll(selectors))
     .filter((el) => isVisible(el))
     .slice(0, 60)
@@ -64,6 +137,9 @@ function collectAutomationFeedback() {
         color: style.color || "",
         backgroundColor: style.backgroundColor || "",
         borderColor: style.borderColor || "",
+        accessibleName: getAccessibleName(htmlEl),
+        accessibleDescription: getAccessibleDescription(htmlEl),
+        labelText: getAssociatedLabelText(htmlEl),
       };
     })
     .filter((item) => item.text || item.className || item.role);
@@ -78,7 +154,7 @@ function collectAutomationFeedback() {
     .map((el) => {
       const htmlEl = el as HTMLElement;
       const label =
-        htmlEl.getAttribute("aria-label") ||
+        getAccessibleName(htmlEl) ||
         htmlEl.getAttribute("name") ||
         htmlEl.getAttribute("id") ||
         htmlEl.tagName.toLowerCase();

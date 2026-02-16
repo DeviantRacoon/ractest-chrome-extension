@@ -20,7 +20,8 @@ export const useAutopilot = () => {
   useEffect(() => {
     const checkApiKey = async () => {
       const settings = await storageService.getSettings();
-      setHasApiKey(!!settings.openRouterApiKey);
+      const aiEnabled = settings.enableAiForTesting !== false;
+      setHasApiKey(!aiEnabled || !!settings.openRouterApiKey);
     };
     checkApiKey();
   }, []);
@@ -90,7 +91,8 @@ export const useAutopilot = () => {
 
     // Failsafe check
     const settings = await storageService.getSettings();
-    if (!settings.openRouterApiKey) {
+    const aiEnabled = settings.enableAiForTesting !== false;
+    if (aiEnabled && !settings.openRouterApiKey) {
       error(t("autopilot.toast.noApiKey"));
       setHasApiKey(false);
       return;
