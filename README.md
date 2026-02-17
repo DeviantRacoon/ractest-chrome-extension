@@ -63,8 +63,10 @@ npm run build
 2. Go to **Settings** and configure your OpenRouter API key (optional, required for AI features).
 3. Create a new flow in **Flows**.
 4. Add steps with:
+
 - Manual capture (Inspector)
 - AI generation (prompt-based)
+
 5. Run the flow and monitor execution.
 6. Review output in **History**.
 
@@ -72,11 +74,11 @@ npm run build
 
 - Product requirements: [PRD.md](PRD.md)
 - Privacy policy: [PRIVACY.md](PRIVACY.md)
-- Contribution guide: [contributions.md](contributions.md)
+- Contribution guide: [CONTRIBUTIONS.md](CONTRIBUTIONS.md)
 
 ## Contributing
 
-Contributions are welcome. Please read [contributions.md](contributions.md) before opening a pull request.
+Contributions are welcome. Please read [CONTRIBUTIONS.md](CONTRIBUTIONS.md) before opening a pull request.
 
 ## License
 
