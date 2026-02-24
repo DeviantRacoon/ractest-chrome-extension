@@ -1,17 +1,17 @@
 import type {
-  AutopilotCycleTelemetry,
-  AutopilotTelemetry,
-  ConsoleLogEntry,
-  FakeDataType,
-  TestStep,
-} from "../../commons/types";
-import type {
   IAgent,
   IAgentLog,
   IDOMMarker,
   IInspector,
   ILLMProvider,
 } from "../domain/interfaces";
+import type {
+  AutopilotCycleTelemetry,
+  AutopilotTelemetry,
+  ConsoleLogEntry,
+  FakeDataType,
+  TestStep,
+} from "../../commons/types";
 import { ReportGenerator } from "./ReportGenerator";
 
 interface TelemetryLLMCounters {
@@ -135,14 +135,8 @@ export class AgentService implements IAgent {
     // For this refactor, we leave it as is but note the architectural improvement needed.
     this.inspector.onErrorCaptured((error) => {
       const subtype = String(error.subtype || "");
-      if (
-        subtype === "CONSOLE" &&
-        error.payload &&
-        typeof error.payload === "object"
-      ) {
-        const level = String(
-          (error.payload as any).level || "log",
-        ).toLowerCase();
+      if (subtype === "CONSOLE" && error.payload && typeof error.payload === "object") {
+        const level = String((error.payload as any).level || "log").toLowerCase();
         const message = String((error.payload as any).message || "");
         const preview = `${level}: ${message}`.slice(0, 280);
         const mappedLevel: ConsoleLogEntry["level"] =
@@ -211,8 +205,8 @@ export class AgentService implements IAgent {
     // Use user setting or default to 1000ms. If explicitly 0, use 0.
     const STEP_DELAY =
       settings.defaultDelay !== undefined ? settings.defaultDelay : 1000;
-    const EFFECTIVE_STEP_DELAY = Math.max(STEP_DELAY, 0);
-    const STABILITY_TIMEOUT = Math.max(STEP_DELAY, 300);
+    const EFFECTIVE_STEP_DELAY = Math.min(Math.max(STEP_DELAY, 0), 300);
+    const STABILITY_TIMEOUT = Math.min(Math.max(STEP_DELAY, 700), 1500);
     const retryByStepKey = new Map<string, number>();
     const MAX_HARD_REPLANS = AGENT_MODE === "balanced" ? 6 : 3;
     const replanAttemptsByReason = new Map<string, number>();
@@ -394,21 +388,14 @@ export class AgentService implements IAgent {
           );
 
           const markStart = this.nowMs();
-          await this.domMarker.markInteractiveElements(
-            profileId,
-            cycleAdaptiveMode,
-          );
+          await this.domMarker.markInteractiveElements(profileId, cycleAdaptiveMode);
           cycleMarkMs = this.elapsedMs(markStart);
 
           const contextStart = this.nowMs();
-          const markedContext =
-            await this.domMarker.getMarkedContext(profileId);
+          const markedContext = await this.domMarker.getMarkedContext(profileId);
           cycleContextMs = this.elapsedMs(contextStart);
 
-          currentMarkedContext = this.compactContext(
-            markedContext,
-            previousMarkedContext,
-          );
+          currentMarkedContext = this.compactContext(markedContext, previousMarkedContext);
           currentElementMetaMap = this.extractElementMetaMap(markedContext);
           const formProgress = this.getFormProgress(markedContext);
           if (
@@ -623,12 +610,8 @@ export class AgentService implements IAgent {
                 `⏭️ Replan suppressed (${replanReason}) to preserve flow continuity.`,
               );
             } else {
-              const reasonBudget = this.getReplanBudget(
-                replanReason,
-                AGENT_MODE,
-              );
-              const reasonAttempts =
-                (replanAttemptsByReason.get(replanReason) || 0) + 1;
+              const reasonBudget = this.getReplanBudget(replanReason, AGENT_MODE);
+              const reasonAttempts = (replanAttemptsByReason.get(replanReason) || 0) + 1;
               replanAttemptsByReason.set(replanReason, reasonAttempts);
               if (reasonAttempts > reasonBudget) {
                 const reason =
@@ -700,10 +683,7 @@ export class AgentService implements IAgent {
                     );
                   }
                 } else {
-                  this.log(
-                    "thinking",
-                    "🧠 Generating initial execution map...",
-                  );
+                  this.log("thinking", "🧠 Generating initial execution map...");
                 }
 
                 let newPlan: TestStep[] = [];
@@ -738,8 +718,7 @@ export class AgentService implements IAgent {
                     submitState: runMemory.submitState,
                     formProgress,
                     stepsExecuted: reportGen.getReport().stepsExecuted,
-                    remainingBudget:
-                      MAX_STEPS - reportGen.getReport().stepsExecuted,
+                    remainingBudget: MAX_STEPS - reportGen.getReport().stepsExecuted,
                     lastOutcome: this.lastOutcome,
                     domContext: plannerDomContext,
                     previousSteps,
@@ -751,10 +730,7 @@ export class AgentService implements IAgent {
                 prefetchedPlanDomHash = "";
 
                 if (!newPlan || newPlan.length === 0) {
-                  this.log(
-                    "error",
-                    "AI returned an empty execution map. Stopping.",
-                  );
+                  this.log("error", "AI returned an empty execution map. Stopping.");
                   reportGen.setStatus("FAILED");
                   cycleOutcome = "failed";
                   break;
@@ -826,7 +802,10 @@ export class AgentService implements IAgent {
             const mustCommitBeforeFinish =
               (goalRequiresCriticalCommit || pendingCriticalCommitAction) &&
               !hasSubmittedCriticalAction;
-            if (mustCommitBeforeFinish && runMemory.submitState === "filling") {
+            if (
+              mustCommitBeforeFinish &&
+              runMemory.submitState === "filling"
+            ) {
               this.incrementCounter(
                 replanReasonCounters,
                 "finish_before_form_complete",
@@ -850,9 +829,8 @@ export class AgentService implements IAgent {
               (runMemory.submitState === "ready_to_commit" ||
                 runMemory.submitState === "commit_in_flight")
             ) {
-              const fallbackCommitTargetId = this.findCriticalCommitTargetId(
-                currentElementMetaMap,
-              );
+              const fallbackCommitTargetId =
+                this.findCriticalCommitTargetId(currentElementMetaMap);
               if (fallbackCommitTargetId) {
                 if (fallbackCommitTargetId === lastForcedCommitTargetId) {
                   this.incrementCounter(
@@ -906,10 +884,7 @@ export class AgentService implements IAgent {
                 );
                 continue;
               }
-              this.incrementCounter(
-                replanReasonCounters,
-                "finish_without_commit",
-              );
+              this.incrementCounter(replanReasonCounters, "finish_without_commit");
               cycleReplanned = true;
               cycleReplanReason = "hard:finish_without_commit";
               cycleOutcome = "retry";
@@ -969,10 +944,7 @@ export class AgentService implements IAgent {
             nextStep.targetId &&
             runMemory.lastCommitTargetId === nextStep.targetId
           ) {
-            this.incrementCounter(
-              replanReasonCounters,
-              "duplicate_commit_click",
-            );
+            this.incrementCounter(replanReasonCounters, "duplicate_commit_click");
             cycleReplanned = true;
             cycleReplanReason = "soft:duplicate_commit_click";
             cycleOutcome = "retry";
@@ -1025,10 +997,7 @@ export class AgentService implements IAgent {
               );
               continue;
             }
-            this.log(
-              "error",
-              `❌ Invalid generated step: ${preconditionError}`,
-            );
+            this.log("error", `❌ Invalid generated step: ${preconditionError}`);
             reportGen.addError("console", preconditionError);
             reportGen.setStatus("FAILED");
             stepResults.push({
@@ -1179,10 +1148,7 @@ export class AgentService implements IAgent {
                 nextStep.targetId,
                 nextStep.action === "CHECK",
               );
-              checkboxStateTimestampByTargetId.set(
-                nextStep.targetId,
-                Date.now(),
-              );
+              checkboxStateTimestampByTargetId.set(nextStep.targetId, Date.now());
             }
             stepResults.push({
               stepId: nextStep.id,
@@ -1304,7 +1270,9 @@ export class AgentService implements IAgent {
       const runEndedAt = Date.now();
       const runDurationMs = this.elapsedMs(runPerfStartMs);
       const avgCycleMs =
-        cycleCounter > 0 ? this.roundMs(totalCycleMs / cycleCounter) : 0;
+        cycleCounter > 0
+          ? this.roundMs(totalCycleMs / cycleCounter)
+          : 0;
       const telemetry: AutopilotTelemetry = {
         summary: {
           schemaVersion: 1,
@@ -1432,9 +1400,7 @@ export class AgentService implements IAgent {
         .filter(Boolean),
     );
 
-    const changedLines = currentLines.filter(
-      (line) => !previousSet.has(line.trim()),
-    );
+    const changedLines = currentLines.filter((line) => !previousSet.has(line.trim()));
     const prioritized = [...changedLines, ...currentLines].slice(0, MAX_LINES);
     const compacted = prioritized.join("\n");
     return compacted.length > MAX_CHARS
@@ -1449,9 +1415,7 @@ export class AgentService implements IAgent {
       maxChars: number;
     },
   ): string {
-    const lines = markedContext
-      .split("\n")
-      .filter((line) => line.trim().length > 0);
+    const lines = markedContext.split("\n").filter((line) => line.trim().length > 0);
     if (lines.length === 0) return "";
     const selected: string[] = [];
     const seen = new Set<string>();
@@ -1503,8 +1467,7 @@ export class AgentService implements IAgent {
 
     const compacted = selected.join("\n");
     return compacted.length > options.maxChars
-      ? compacted.slice(0, options.maxChars) +
-          "\n...[planner context truncated]"
+      ? compacted.slice(0, options.maxChars) + "\n...[planner context truncated]"
       : compacted;
   }
 
@@ -1605,8 +1568,8 @@ export class AgentService implements IAgent {
         (m[0] || "").toLowerCase(),
       ),
     );
-    const afterMatches = Array.from(afterContext.matchAll(keywordRegex)).map(
-      (m) => (m[0] || "").toLowerCase(),
+    const afterMatches = Array.from(afterContext.matchAll(keywordRegex)).map((m) =>
+      (m[0] || "").toLowerCase(),
     );
     const newKeywords = afterMatches.filter((k) => !beforeMatches.has(k));
     return [...new Set(newKeywords)].slice(0, 20);
@@ -1638,16 +1601,12 @@ export class AgentService implements IAgent {
     if (params.visualErrors.length > 0) score += 4;
 
     for (const s of params.visualSignals) {
-      const blob =
-        `${s.text} ${s.className} ${s.role} ${s.ariaLive}`.toLowerCase();
+      const blob = `${s.text} ${s.className} ${s.role} ${s.ariaLive}`.toLowerCase();
       if (s.toneHint === "error") score += 3;
       if (s.toneHint === "success") score -= 3;
       if (failureRegex.test(blob)) score += 3;
       if (successRegex.test(blob)) score -= 3;
-      if (
-        /alert/.test((s.role || "").toLowerCase()) &&
-        failureRegex.test(blob)
-      ) {
+      if (/alert/.test((s.role || "").toLowerCase()) && failureRegex.test(blob)) {
         score += 2;
       }
       if (
@@ -1703,13 +1662,8 @@ export class AgentService implements IAgent {
     this.log("thinking", "🧪 Running final QA verification...");
     await this.domMarker.waitForDOMStability(1200);
     await this.domMarker.markInteractiveElements(params.profileId, "complex");
-    const afterRawContext = await this.domMarker.getMarkedContext(
-      params.profileId,
-    );
-    const afterContext = this.compactContext(
-      afterRawContext,
-      params.beforeContext,
-    );
+    const afterRawContext = await this.domMarker.getMarkedContext(params.profileId);
+    const afterContext = this.compactContext(afterRawContext, params.beforeContext);
     const afterVisualErrors = await this.domMarker.detectVisualErrors();
     const outcomeSignals = await this.domMarker.getOutcomeSignals();
     const visualSignals = await this.domMarker.getVisualSignals();
@@ -1717,11 +1671,7 @@ export class AgentService implements IAgent {
       verdict: "error" | "success" | "warning" | "neutral";
       confidence: number;
       rationale: string;
-    } = {
-      verdict: "neutral",
-      confidence: 0.5,
-      rationale: "No visual signals.",
-    };
+    } = { verdict: "neutral", confidence: 0.5, rationale: "No visual signals." };
     if (visualSignals.length) {
       const visualClassifyStart = this.nowMs();
       visualDecision = await this.llmProvider.classifyVisualState({
@@ -1779,8 +1729,7 @@ export class AgentService implements IAgent {
       return {
         verdict: "inconclusive",
         confidence: 0.5,
-        rationale:
-          "Final deterministic verification is inconclusive (no AI fallback available).",
+        rationale: "Final deterministic verification is inconclusive (no AI fallback available).",
       };
     }
 
@@ -1796,8 +1745,7 @@ export class AgentService implements IAgent {
         outcomeSignals,
         newErrorKeywords,
         domChanged:
-          this.computeHash(params.beforeContext) !==
-          this.computeHash(afterContext),
+          this.computeHash(params.beforeContext) !== this.computeHash(afterContext),
       },
       executedSteps: params.executedSteps.map((s) => ({
         action: s.action,
@@ -1807,10 +1755,7 @@ export class AgentService implements IAgent {
       beforePreview: params.beforeContext.slice(0, 1200),
       afterPreview: afterContext.slice(0, 1200),
     };
-    console.debug(
-      "[RacTest][Autopilot][AI Final Eval Payload]",
-      finalEvalPayload,
-    );
+    console.debug("[RacTest][Autopilot][AI Final Eval Payload]", finalEvalPayload);
 
     const outcomeStart = this.nowMs();
     const outcome = await this.llmProvider.evaluateOutcome({
@@ -1940,8 +1885,7 @@ export class AgentService implements IAgent {
   ): number | null {
     const strongPattern =
       /(create account|crear cuenta|submit|enviar|save|guardar|finish|finalizar|checkout|confirm)/i;
-    const weakPattern =
-      /(create|crear|continue|continuar|register|signup|sign up)/i;
+    const weakPattern = /(create|crear|continue|continuar|register|signup|sign up)/i;
 
     for (const [id, meta] of elementMetaMap.entries()) {
       const tag = meta.tag.toLowerCase();
@@ -1965,16 +1909,16 @@ export class AgentService implements IAgent {
     if (step.action !== "TYPE") return;
     if (step.value?.trim()) return;
 
-    const raw = step.targetId
-      ? elementMetaMap.get(step.targetId)?.raw || ""
-      : "";
+    const raw = step.targetId ? elementMetaMap.get(step.targetId)?.raw || "" : "";
     const type = this.inferDataTypeFromContext(raw);
     step.useFakeData = true;
     step.fakeDataType = type;
     step.value = this.generateFakeValue(type);
   }
 
-  private inferDataTypeFromContext(rawContext: string): FakeDataType {
+  private inferDataTypeFromContext(
+    rawContext: string,
+  ): FakeDataType {
     if (/first.?name|nombre(?!.*apellido)/.test(rawContext)) return "firstName";
     if (/last.?name|surname|apellido/.test(rawContext)) return "lastName";
     if (/email|e-mail|correo/.test(rawContext)) return "email";

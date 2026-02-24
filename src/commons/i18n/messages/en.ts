@@ -14,8 +14,6 @@ const en = {
   "settings.section.data": "Data",
 
   "settings.defaultDelay": "Default delay (ms)",
-  "settings.finalValidationDelay": "Final validation delay (ms)",
-  "settings.finalValidationDelay.helper": "Wait time at the end of the flow",
   "settings.theme": "Theme",
   "settings.theme.dark": "Dark",
   "settings.theme.light": "Light",
@@ -100,24 +98,6 @@ const en = {
   "fakeData.option.country": "Country",
   "fakeData.option.company": "Company",
   "fakeData.option.jobTitle": "Job Title",
-
-  "recipes.linkFlows": "Link Flows",
-  "sequence.new.title": "New Sequence",
-  "sequence.new.nameLabel": "Sequence Name",
-  "sequence.new.namePlaceholder": "e.g., Full Checkout Flow",
-  "sequence.new.currentSequence": "Current Sequence (Flows)",
-  "sequence.new.dragToReorder":
-    "Drag to reorder flows. The order here defines execution flow.",
-  "sequence.new.addFromRight": "Add flows from the right panel.",
-  "sequence.new.availableRecipes": "Available Recipes",
-  "sequence.new.addFlow": "Add Flow to Sequence",
-  "sequence.new.selectRecipe": "Select a recipe...",
-  "sequence.new.add": "Add",
-  "sequence.new.emptyState": "Add recipes from the dropdown above",
-  "sequence.new.save": "Save Sequence",
-  "sequence.new.cancel": "Cancel",
-  "sequence.new.toast.success": "Sequence saved successfully",
-  "sequence.new.toast.error": "Error saving recipe sequence",
   "fakeData.option.url": "URL",
   "fakeData.option.date": "Date",
   "fakeData.option.time": "Time",
@@ -144,29 +124,6 @@ const en = {
   "about.community": "Made for the testing community.",
   "about.close": "Close",
 
-  "folders.new": "New Folder",
-  "folders.edit": "Edit folder",
-  "folders.flowCount": "{{count}} flows",
-  "folders.empty": "No flows in this folder",
-  "folders.noFolder": "No folder",
-  "folders.modal.createTitle": "New Folder",
-  "folders.modal.editTitle": "Edit Folder",
-  "folders.modal.name": "Folder name",
-  "folders.modal.namePlaceholder": "E.g: Google",
-  "folders.modal.nameRequired": "Name is required",
-  "folders.modal.icon": "Icon",
-  "folders.modal.save": "Save",
-  "folders.modal.cancel": "Cancel",
-  "folders.delete.title": "Delete Folder",
-  "folders.delete.message":
-    "This will delete the folder but NOT the flows inside. Flows will become ungrouped.",
-  "folders.delete.confirm": "Delete",
-  "folders.delete.cancel": "Cancel",
-  "folders.toast.created": "Folder created",
-  "folders.toast.updated": "Folder updated",
-  "folders.toast.deleted": "Folder deleted",
-  "folders.toast.error": "Error saving folder",
-
   "recipes.title": "My Flows",
   "recipes.subtitle": "Manage your test flows",
   "recipes.autopilot": "Autopilot",
@@ -190,9 +147,6 @@ const en = {
   "recipes.toast.loadError": "Error loading flows",
   "recipes.toast.deleted": "Flow deleted successfully",
   "recipes.toast.deleteError": "Error deleting flow",
-
-  "execution.startFromDropdown": "Start from...",
-  "execution.skipped": "Skipped",
 
   "autopilot.subtitle": "Autonomous browsing agent",
   "autopilot.apiKey.required": "An API Key is required to use autopilot. Go to",
@@ -269,7 +223,8 @@ const en = {
   "history.details.telemetry.observeMs": "Observe total",
   "history.details.telemetry.actMs": "Act total",
   "history.details.telemetry.replanReasons": "Replan reasons",
-  "history.details.telemetry.noReplanReasons": "No replan reasons captured",
+  "history.details.telemetry.noReplanReasons":
+    "No replan reasons captured",
 
   "profile.new": "New flow",
   "profile.edit": "Edit flow",
@@ -306,7 +261,6 @@ const en = {
   "stepEditor.action.SELECT": "Select",
   "stepEditor.action.CHECK": "Check",
   "stepEditor.action.UNCHECK": "Uncheck",
-  "stepEditor.action.RECIPE": "Call Recipe",
   "stepEditor.stepCard.highlight": "Highlight on page",
   "stepEditor.stepCard.delete": "Delete step",
   "stepEditor.stepCard.actionType": "Action Type",
@@ -330,8 +284,7 @@ const en = {
   "stepEditor.aiModal.promptPlaceholder":
     "E.g: Fill the registration form with valid data...",
   "stepEditor.aiModal.readingModeLabel": "Reading Mode:",
-  "stepEditor.aiModal.readingMode.fast.title":
-    "Fast: Interactive elements only",
+  "stepEditor.aiModal.readingMode.fast.title": "Fast: Interactive elements only",
   "stepEditor.aiModal.readingMode.normal.title": "Normal: Smart context",
   "stepEditor.aiModal.readingMode.complex.title": "Complex: Full scan",
   "stepEditor.aiModal.readingMode.fast.description":

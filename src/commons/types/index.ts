@@ -1,17 +1,6 @@
 // Core Types for RacTest Chrome Extension
 
 /**
- * Represents a folder to group test profiles
- */
-export interface FlowFolder {
-  id: string;
-  name: string;
-  icon: string; // emoji
-  createdAt: number;
-  updatedAt: number;
-}
-
-/**
  * Represents a complete test profile (recipe)
  */
 export interface TestProfile {
@@ -19,7 +8,6 @@ export interface TestProfile {
   name: string;
   url: string;
   steps: TestStep[];
-  folderId?: string; // optional folder assignment
   createdAt: number;
   updatedAt: number;
 }
@@ -100,7 +88,6 @@ export type ActionType =
   | "UNCHECK"
   | "DIVIDER"
   | "ASSERT"
-  | "RECIPE"
   | "FINISH";
 
 /**
@@ -227,7 +214,6 @@ export interface RecipeExecutionResult {
  */
 export const StorageKeys = {
   PROFILES: "ractest_profiles",
-  FOLDERS: "ractest_folders",
   HISTORY: "ractest_history",
   SETTINGS: "ractest_settings",
 } as const;
@@ -240,7 +226,6 @@ export type AppLanguagePreference = AppLanguage | "auto";
  */
 export interface UserSettings {
   defaultDelay: number; // default delay in ms
-  finalValidationDelay?: number; // delay for final recipe validation in ms
   theme: "dark" | "light"; // theme preference (future)
   language: AppLanguagePreference; // UI language preference
   highlightColor: string; // inspector highlight color

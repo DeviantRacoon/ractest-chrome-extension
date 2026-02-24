@@ -2,13 +2,12 @@ import { lazy, Suspense, useEffect } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import "./App.css";
 import MainLayout from "./commons/components/MainLayout";
+import { applyThemeToDocument } from "./commons/lib/theme";
 import { ToastProvider } from "./commons/components/ui";
 import storageService from "./commons/lib/storage";
-import { applyThemeToDocument } from "./commons/lib/theme";
 
 const RecipesPage = lazy(() => import("./pages/RecipesPage"));
 const ProfileFormPage = lazy(() => import("./pages/ProfileFormPage"));
-const SequenceFormPage = lazy(() => import("./pages/SequenceFormPage"));
 const StepEditorPage = lazy(() => import("./pages/StepEditorPage"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const HistoryDetailsPage = lazy(() => import("./pages/HistoryDetailsPage"));
@@ -44,7 +43,6 @@ function App() {
               <Route index element={<RecipesPage />} />
               <Route path="profile/new" element={<ProfileFormPage />} />
               <Route path="profile/edit" element={<ProfileFormPage />} />
-              <Route path="sequence/new" element={<SequenceFormPage />} />
               <Route path="profile/:id/steps" element={<StepEditorPage />} />
               <Route path="history" element={<HistoryPage />} />
               <Route path="history/:id" element={<HistoryDetailsPage />} />
