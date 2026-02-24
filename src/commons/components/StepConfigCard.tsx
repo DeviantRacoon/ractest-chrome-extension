@@ -1,3 +1,4 @@
+import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import {
   CheckSquare,
   ChevronDown,
@@ -11,9 +12,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
-import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { useI18n } from "../i18n";
-import type { ActionType, TestStep } from "../types";
+import type { ActionType, TestProfile, TestStep } from "../types";
 import { FakeDataSelector } from "./FakeDataSelector";
 import { Input, Select } from "./ui";
 
@@ -25,6 +25,7 @@ interface StepConfigCardProps {
   onHighlight: (selector: string) => void;
   isDragging?: boolean;
   dragHandleListeners?: DraggableSyntheticListeners;
+  availableRecipes?: TestProfile[];
 }
 
 const ACTION_ICONS: Record<ActionType, React.ReactNode> = {
@@ -35,6 +36,7 @@ const ACTION_ICONS: Record<ActionType, React.ReactNode> = {
   UNCHECK: <Square className="w-4 h-4" />,
   DIVIDER: <div className="w-4 h-4 bg-border-default rounded-sm" />,
   ASSERT: <ShieldCheck className="w-4 h-4" />,
+  RECIPE: <List className="w-4 h-4" />,
   FINISH: <CheckSquare className="w-4 h-4 text-green-500" />,
 };
 
@@ -46,6 +48,7 @@ const ACTION_Colors: Record<ActionType, string> = {
   UNCHECK: "text-rose-400 bg-rose-400/10",
   DIVIDER: "text-text-muted bg-bg-secondary",
   ASSERT: "text-orange-400 bg-orange-400/10",
+  RECIPE: "text-indigo-400 bg-indigo-400/10",
   FINISH: "text-green-500 bg-green-500/10",
 };
 
@@ -71,6 +74,11 @@ const ACTION_OPTIONS = [
     needsValue: false,
     icon: ACTION_ICONS.UNCHECK,
   },
+  {
+    value: "RECIPE",
+    needsValue: true,
+    icon: ACTION_ICONS.RECIPE,
+  },
 ];
 
 export const StepConfigCard: React.FC<StepConfigCardProps> = ({
@@ -81,6 +89,7 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
   onHighlight,
   isDragging = false,
   dragHandleListeners,
+  availableRecipes = [],
 }) => {
   const { t } = useI18n();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -104,6 +113,8 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
         return t("stepEditor.action.CHECK");
       case "UNCHECK":
         return t("stepEditor.action.UNCHECK");
+      case "RECIPE":
+        return t("stepEditor.action.RECIPE");
       default:
         return action;
     }
@@ -164,9 +175,15 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
             <span className="font-semibold text-sm text-text-primary">
               {selectedAction ? getActionLabel(selectedAction.value) : ""}
             </span>
-            {step.value && needsValue && (
+            {step.value && needsValue && step.action !== "RECIPE" && (
               <span className="text-xs text-text-secondary bg-bg-secondary px-1.5 py-0.5 rounded border border-border-default truncate max-w-[100px]">
                 {step.value}
+              </span>
+            )}
+            {step.value && needsValue && step.action === "RECIPE" && (
+              <span className="text-xs text-indigo-400 bg-indigo-400/10 px-1.5 py-0.5 rounded border border-indigo-400/20 truncate max-w-[150px]">
+                {availableRecipes.find((r) => r.id === step.value)?.name ||
+                  "Receta desconocida"}
               </span>
             )}
             {step.delay > 0 && (
@@ -236,7 +253,7 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
               </div>
             </div>
 
-            {needsValue && (
+            {needsValue && step.action !== "RECIPE" && (
               <div className="space-y-2">
                 <Input
                   label={
@@ -333,6 +350,21 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {step.action === "RECIPE" && (
+              <div className="space-y-2">
+                <Select
+                  label={t("stepEditor.action.RECIPE")}
+                  value={step.value || ""}
+                  onChange={(val) => onUpdate(step.id, { value: val })}
+                  options={availableRecipes.map((r) => ({
+                    value: r.id,
+                    label: r.name,
+                  }))}
+                  fullWidth
+                />
               </div>
             )}
 

@@ -207,179 +207,48 @@ export class ExecutionService {
     // Slice steps to honour startFromIndex
     const stepsToRun = recipe.steps.slice(startFromIndex);
 
+    const { storageService } = await import("./storage");
+    const settings = await storageService.getSettings();
+    const defaultDelay = settings.defaultDelay ?? 1000;
+
     // Execute steps one by one
     const results: StepExecutionResult[] = [];
     this.executionLogs = []; // Reset logs
 
     try {
-      // Execute steps one by one
-      for (const step of stepsToRun) {
-        // Check for cancellation
-        if (!this.currentTabId) {
-          const result: StepExecutionResult = {
-            stepId: step.id,
-            status: "skipped",
-            message: "Ejecución cancelada",
-            timestamp: Date.now(),
-          };
-          results.push(result);
-          break; // Stop loop
-        }
-
-        try {
-          // Ensure content script is ready (crucial after navigation)
-          await this.ensureContentScript(this.currentTabId);
-          const stepBaselineSnapshot =
-            await this.prepareReactiveObservationOnContent(this.currentTabId);
-
-          // Execute step
-          this.pendingFailureSignals = [];
-          const result = await this.executeStepOnContent(
-            this.currentTabId,
-            step,
-          );
-          results.push(result);
-          this.onStepResultCallback?.(result);
-
-          if (result.status === "error") {
-            // Save history on error
-            await this.saveHistory(recipe, "failed", results, result.message);
-            this.onFailedCallback?.(result.message || "Error en paso", results);
-            this.resetExecutionState();
-            return;
-          }
-
-          // Observe hard-failure signals in a short reactive window after each step.
-          const reactiveWindowMs = Math.min(Math.max(step.delay, 600), 3000);
-          const hardFailureSignal =
-            await this.waitForHardFailureSignal(reactiveWindowMs);
-
-          if (hardFailureSignal) {
-            const errorMessage = `Fallo detectado automáticamente (${hardFailureSignal.subtype}): ${hardFailureSignal.message}`;
-            const failureStepResult: StepExecutionResult = {
-              stepId: step.id,
-              status: "error",
-              message: errorMessage,
-              error: errorMessage,
-              timestamp: Date.now(),
-            };
-            results.push(failureStepResult);
-            this.onStepResultCallback?.(failureStepResult);
-            await this.saveHistory(
-              recipe,
-              "failed",
-              results,
-              errorMessage,
-              hardFailureSignal,
-            );
-            this.onFailedCallback?.(errorMessage, results);
-            this.sendNotification(
-              "Error en el flujo",
-              `Se detectó una falla automática: ${hardFailureSignal.subtype}`,
-            );
-            this.resetExecutionState();
-            return;
-          }
-
-          const domFailureSignal = await this.checkReactiveFailureOnContent(
-            this.currentTabId,
-            step.action,
-            result.message,
-            stepBaselineSnapshot,
-          );
-
-          if (domFailureSignal) {
-            const errorMessage = `Fallo detectado automáticamente (${domFailureSignal.subtype}): ${domFailureSignal.message}`;
-            const failureStepResult: StepExecutionResult = {
-              stepId: step.id,
-              status: "error",
-              message: errorMessage,
-              error: errorMessage,
-              timestamp: Date.now(),
-            };
-            results.push(failureStepResult);
-            this.onStepResultCallback?.(failureStepResult);
-            await this.saveHistory(
-              recipe,
-              "failed",
-              results,
-              errorMessage,
-              domFailureSignal,
-            );
-            this.onFailedCallback?.(errorMessage, results);
-            this.sendNotification(
-              "Error en el flujo",
-              "Se detectó un error visible de validación en la página.",
-            );
-            this.resetExecutionState();
-            return;
-          }
-
-          if (
-            this.currentTabId &&
-            this.isCriticalCommitStep(step, result.message)
-          ) {
-            const submitWindow = await this.collectTemporalEvidenceWindow(
-              this.currentTabId,
-              4500,
-              300,
-            );
-            const deterministicAfterSubmit =
-              this.evaluateDeterministicOutcomeFromWindow(submitWindow);
-            if (deterministicAfterSubmit.verdict === "failure") {
-              const errorMessage = `Fallo detectado automáticamente (DETERMINISTIC_POST_SUBMIT): ${deterministicAfterSubmit.rationale}`;
-              const failureStepResult: StepExecutionResult = {
-                stepId: step.id,
-                status: "error",
-                message: errorMessage,
-                error: errorMessage,
-                timestamp: Date.now(),
-              };
-              results.push(failureStepResult);
-              this.onStepResultCallback?.(failureStepResult);
-              await this.saveHistory(recipe, "failed", results, errorMessage, {
-                subtype: "FORM_VALIDATION",
-                message: deterministicAfterSubmit.rationale,
-                timestamp: Date.now(),
-                payload: {
-                  score: deterministicAfterSubmit.score,
-                  signals: deterministicAfterSubmit.signals,
-                  samples: submitWindow.samples,
-                },
-              });
-              this.onFailedCallback?.(errorMessage, results);
-              this.sendNotification(
-                "Error en el flujo",
-                "Se detectó fallo visible tras el submit.",
-              );
-              this.resetExecutionState();
-              return;
-            }
-          }
-
-          if (step.delay > reactiveWindowMs) {
-            await this.wait(step.delay - reactiveWindowMs);
-          }
-        } catch (error) {
-          // Handle unexpected errors (e.g. tab closed)
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-
-          // Save history on unexpected error
-          await this.saveHistory(recipe, "failed", results, errorMessage);
-          this.onFailedCallback?.(errorMessage, results);
-          this.resetExecutionState();
-          return;
-        }
-      }
+      // Execute step list (recursively handling RECIPE steps)
+      const outcome = await this.executeStepList(
+        stepsToRun,
+        results,
+        (res) => this.onStepResultCallback?.(res),
+        0,
+        defaultDelay,
+      );
 
       // Check if it was cancelled
-      if (!this.currentTabId) {
+      // (or if tab was closed during execution, triggering cancellation)
+      if (outcome.cancelled || !this.currentTabId) {
         await this.saveHistory(recipe, "cancelled", results);
         this.resetExecutionState();
-        // trigger failed callback with cancelled message or just do nothing?
-        // Usually better to have a onCancelled callback, but for now let's treat it as a non-complete state
-        // or just end.
+        return;
+      }
+
+      if (!outcome.success) {
+        await this.saveHistory(
+          recipe,
+          "failed",
+          results,
+          outcome.error,
+          outcome.failureSignal,
+        );
+        this.onFailedCallback?.(outcome.error || "Error en paso", results);
+        if (outcome.failureSignal) {
+          this.sendNotification(
+            "Error en el flujo",
+            `Se detectó un fallo automático (${outcome.failureSignal.subtype})`,
+          );
+        }
+        this.resetExecutionState();
         return;
       }
 
@@ -388,6 +257,7 @@ export class ExecutionService {
         recipe,
         results,
         this.currentTabId,
+        settings.finalValidationDelay ?? 3500,
       );
       if (finalOutcome.verdict === "failure") {
         const errorMessage = `Fallo detectado automáticamente (FINAL_OUTCOME): ${finalOutcome.rationale}`;
@@ -437,6 +307,231 @@ export class ExecutionService {
         `El flujo "${recipe.name}" ha fallado: ${errorMessage}`,
       );
     }
+  }
+
+  private async executeStepList(
+    stepsToRun: TestStep[],
+    results: StepExecutionResult[],
+    onStepResultCallback: ((res: StepExecutionResult) => void) | null,
+    depth: number,
+    defaultDelay: number,
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    failureSignal?: FailureSignal;
+    cancelled?: boolean;
+  }> {
+    for (const step of stepsToRun) {
+      if (!this.currentTabId) {
+        const result: StepExecutionResult = {
+          stepId: step.id,
+          status: "skipped",
+          message: "Ejecución cancelada",
+          timestamp: Date.now(),
+        };
+        results.push(result);
+        onStepResultCallback?.(result);
+        return { success: false, cancelled: true };
+      }
+
+      if (step.action === "RECIPE") {
+        if (depth >= 5) {
+          const msg = "Profundidad máxima de recetas anidadas alcanzada (5)";
+          const errStep: StepExecutionResult = {
+            stepId: step.id,
+            status: "error",
+            message: msg,
+            error: msg,
+            timestamp: Date.now(),
+          };
+          results.push(errStep);
+          onStepResultCallback?.(errStep);
+          return { success: false, error: msg };
+        }
+
+        try {
+          const nestedRecipeId = step.value;
+          if (!nestedRecipeId) throw new Error("ID de receta no especificado");
+          const { storageService } = await import("./storage");
+          const nestedRecipe = await storageService.getProfile(nestedRecipeId);
+          if (!nestedRecipe)
+            throw new Error(`Receta anidada no encontrada: ${nestedRecipeId}`);
+
+          const nestedResults: StepExecutionResult[] = [];
+          // Provide null for the callback to prevent the UI from displaying the nested steps.
+          const nestedOutcome = await this.executeStepList(
+            nestedRecipe.steps,
+            nestedResults,
+            null,
+            depth + 1,
+            defaultDelay,
+          );
+
+          if (nestedOutcome.cancelled) {
+            return { success: false, cancelled: true };
+          }
+
+          if (!nestedOutcome.success) {
+            const msg = `Fallo en receta anidada "${nestedRecipe.name}": ${nestedOutcome.error}`;
+            const errStep: StepExecutionResult = {
+              stepId: step.id,
+              status: "error",
+              message: msg,
+              error: msg,
+              timestamp: Date.now(),
+            };
+            results.push(errStep);
+            onStepResultCallback?.(errStep);
+            return {
+              success: false,
+              error: msg,
+              failureSignal: nestedOutcome.failureSignal,
+            };
+          }
+
+          const totalDuration = nestedResults.reduce(
+            (acc, r) => acc + (r.duration || 0),
+            0,
+          );
+          const successMsg = `Receta anidada "${nestedRecipe.name}" completada`;
+          const okStep: StepExecutionResult = {
+            stepId: step.id,
+            status: "success",
+            message: successMsg,
+            duration: totalDuration,
+            timestamp: Date.now(),
+          };
+          results.push(okStep);
+          onStepResultCallback?.(okStep);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const errStep: StepExecutionResult = {
+            stepId: step.id,
+            status: "error",
+            message: msg,
+            error: msg,
+            timestamp: Date.now(),
+          };
+          results.push(errStep);
+          onStepResultCallback?.(errStep);
+          return { success: false, error: msg };
+        }
+        continue;
+      }
+
+      // Normal step logic
+      try {
+        await this.ensureContentScript(this.currentTabId);
+        const stepBaselineSnapshot =
+          await this.prepareReactiveObservationOnContent(this.currentTabId);
+
+        this.pendingFailureSignals = [];
+        const result = await this.executeStepOnContent(this.currentTabId, step);
+        results.push(result);
+        onStepResultCallback?.(result);
+
+        if (result.status === "error") {
+          return { success: false, error: result.message };
+        }
+
+        const effectiveDelay = step.delay > 0 ? step.delay : defaultDelay;
+        const reactiveWindowMs = Math.min(Math.max(effectiveDelay, 100), 3000);
+        const hardFailureSignal =
+          await this.waitForHardFailureSignal(reactiveWindowMs);
+
+        if (hardFailureSignal) {
+          const errorMessage = `Fallo detectado automáticamente (${hardFailureSignal.subtype}): ${hardFailureSignal.message}`;
+          const failureStepResult: StepExecutionResult = {
+            stepId: step.id,
+            status: "error",
+            message: errorMessage,
+            error: errorMessage,
+            timestamp: Date.now(),
+          };
+          results.push(failureStepResult);
+          onStepResultCallback?.(failureStepResult);
+          return {
+            success: false,
+            error: errorMessage,
+            failureSignal: hardFailureSignal,
+          };
+        }
+
+        const domFailureSignal = await this.checkReactiveFailureOnContent(
+          this.currentTabId,
+          step.action,
+          result.message,
+          stepBaselineSnapshot,
+        );
+
+        if (domFailureSignal) {
+          const errorMessage = `Fallo detectado automáticamente (${domFailureSignal.subtype}): ${domFailureSignal.message}`;
+          const failureStepResult: StepExecutionResult = {
+            stepId: step.id,
+            status: "error",
+            message: errorMessage,
+            error: errorMessage,
+            timestamp: Date.now(),
+          };
+          results.push(failureStepResult);
+          onStepResultCallback?.(failureStepResult);
+          return {
+            success: false,
+            error: errorMessage,
+            failureSignal: domFailureSignal,
+          };
+        }
+
+        if (
+          this.currentTabId &&
+          this.isCriticalCommitStep(step, result.message)
+        ) {
+          const submitWindow = await this.collectTemporalEvidenceWindow(
+            this.currentTabId,
+            4500,
+            300,
+          );
+          const deterministicAfterSubmit =
+            this.evaluateDeterministicOutcomeFromWindow(submitWindow);
+          if (deterministicAfterSubmit.verdict === "failure") {
+            const errorMessage = `Fallo detectado automáticamente (DETERMINISTIC_POST_SUBMIT): ${deterministicAfterSubmit.rationale}`;
+            const failureStepResult: StepExecutionResult = {
+              stepId: step.id,
+              status: "error",
+              message: errorMessage,
+              error: errorMessage,
+              timestamp: Date.now(),
+            };
+            results.push(failureStepResult);
+            onStepResultCallback?.(failureStepResult);
+            return {
+              success: false,
+              error: errorMessage,
+              failureSignal: {
+                subtype: "FORM_VALIDATION",
+                message: deterministicAfterSubmit.rationale,
+                timestamp: Date.now(),
+                payload: {
+                  score: deterministicAfterSubmit.score,
+                  signals: deterministicAfterSubmit.signals,
+                  samples: submitWindow.samples,
+                },
+              },
+            };
+          }
+        }
+
+        if (effectiveDelay > reactiveWindowMs) {
+          await this.wait(effectiveDelay - reactiveWindowMs);
+        }
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        return { success: false, error: errorMessage };
+      }
+    }
+
+    return { success: true };
   }
 
   /**
@@ -1017,6 +1112,7 @@ export class ExecutionService {
     recipe: TestProfile,
     results: StepExecutionResult[],
     tabId: number | null,
+    finalValidationDelay: number,
   ): Promise<DeterministicOutcome> {
     if (!tabId) {
       return {
@@ -1027,7 +1123,12 @@ export class ExecutionService {
       };
     }
 
-    const evidence = await this.collectTemporalEvidenceWindow(tabId, 3500, 300);
+    const windowMs = Math.max(1000, finalValidationDelay);
+    const evidence = await this.collectTemporalEvidenceWindow(
+      tabId,
+      windowMs,
+      200,
+    );
     const deterministic = this.evaluateDeterministicOutcomeFromWindow(evidence);
     if (deterministic.verdict !== "inconclusive") return deterministic;
 

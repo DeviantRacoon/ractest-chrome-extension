@@ -50,7 +50,7 @@ export const RecipesView: React.FC<RecipesViewProps> = ({
     <div className="flex flex-col h-full bg-bg-main relative">
       {/* Sticky Header */}
       <div className="sticky top-0 z-20 bg-bg-main/95 backdrop-blur supports-[backdrop-filter]:bg-bg-main/60 border-b border-border-default px-4 py-4 space-y-4">
-        <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
+        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10">
               <img
@@ -86,6 +86,18 @@ export const RecipesView: React.FC<RecipesViewProps> = ({
               title={t("folders.new")}
             >
               <FolderPlus className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => navigate("/sequence/new")}
+              className="border border-border-default/60 hover:border-accent-primary/40 text-indigo-400"
+              title={t("recipes.linkFlows")}
+            >
+              <Plus className="w-4 h-4" />
+              <span className="ml-1 hidden sm:inline">
+                {t("recipes.linkFlows")}
+              </span>
             </Button>
             <Button
               variant="primary"

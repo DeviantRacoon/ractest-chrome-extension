@@ -83,7 +83,7 @@ export const SettingsView: React.FC<SettingsViewProps> = (settingsProps) => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-4 pb-20 space-y-6 overflow-y-auto">
+      <div className="flex-1 p-4 pb-20 space-y-6 overflow-y-auto overflow-x-hidden">
         {/* Branding Card */}
         <div className="flex flex-col items-center justify-center py-6 animate-fade-in">
           <img
@@ -92,7 +92,7 @@ export const SettingsView: React.FC<SettingsViewProps> = (settingsProps) => {
             className="object-contain w-auto h-12 transition-opacity duration-300 opacity-90 hover:opacity-100"
           />
           <p className="mt-2 text-xs font-medium text-text-muted">
-            {t("settings.version", { version: "1.0.0" })}
+            {t("settings.version", { version: "1.5.0" })}
           </p>
         </div>
 
@@ -103,25 +103,44 @@ export const SettingsView: React.FC<SettingsViewProps> = (settingsProps) => {
           </h3>
           <Card className="p-5 transition-colors bg-bg-card/40 backdrop-blur-sm border-border-default/50 hover:border-accent-primary/20">
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <Input
-                label={t("settings.defaultDelay")}
-                type="number"
-                value={settings.defaultDelay}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  updateSetting("defaultDelay", parseInt(e.target.value) || 0)
-                }
-                min={0}
-                step={100}
-                leftIcon={<Timer className="w-4 h-4 text-text-muted" />}
-                fullWidth
-                className="transition-all bg-bg-main/50 border-border-default/50 focus:bg-bg-card"
-              />
+              <div className="space-y-4">
+                <Input
+                  label={t("settings.defaultDelay")}
+                  type="number"
+                  value={settings.defaultDelay}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    updateSetting("defaultDelay", parseInt(e.target.value) || 0)
+                  }
+                  min={0}
+                  step={100}
+                  leftIcon={<Timer className="w-4 h-4 text-text-muted" />}
+                  fullWidth
+                  className="transition-all bg-bg-main/50 border-border-default/50 focus:bg-bg-card"
+                />
+                <Input
+                  label={t("settings.finalValidationDelay")}
+                  type="number"
+                  value={settings.finalValidationDelay ?? 3500}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    updateSetting(
+                      "finalValidationDelay",
+                      parseInt(e.target.value) || 0,
+                    )
+                  }
+                  min={0}
+                  step={100}
+                  helperText={t("settings.finalValidationDelay.helper")}
+                  leftIcon={<Timer className="w-4 h-4 text-text-muted" />}
+                  fullWidth
+                  className="transition-all bg-bg-main/50 border-border-default/50 focus:bg-bg-card"
+                />
+              </div>
 
               <div>
                 <label className="block mb-2 text-sm font-medium text-text-secondary">
                   {t("settings.theme")}
                 </label>
-                <div className="flex border bg-bg-main/50 p-1.5 rounded-xl border-border-default/50">
+                <div className="flex flex-wrap border bg-bg-main/50 p-1.5 rounded-xl border-border-default/50">
                   <button
                     onClick={() => updateSetting("theme", "dark")}
                     className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
@@ -187,7 +206,7 @@ export const SettingsView: React.FC<SettingsViewProps> = (settingsProps) => {
                 <label className="block mb-2 text-sm font-medium text-text-secondary">
                   {t("settings.aiTesting.label")}
                 </label>
-                <div className="flex border bg-bg-main/50 p-1.5 rounded-xl border-border-default/50">
+                <div className="flex flex-wrap border bg-bg-main/50 p-1.5 rounded-xl border-border-default/50">
                   <button
                     onClick={() => updateSetting("enableAiForTesting", true)}
                     className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
@@ -334,7 +353,7 @@ export const SettingsView: React.FC<SettingsViewProps> = (settingsProps) => {
                 <label className="block mb-2 text-sm font-medium text-text-secondary">
                   {t("settings.agentMode")}
                 </label>
-                <div className="flex border bg-bg-main/50 p-1.5 rounded-xl border-border-default/50">
+                <div className="flex flex-wrap border bg-bg-main/50 p-1.5 rounded-xl border-border-default/50">
                   <button
                     onClick={() =>
                       updateSetting("agentMode", "strict_fail_fast")

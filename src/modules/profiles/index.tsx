@@ -1,6 +1,7 @@
 import { ArrowLeft, FolderOpen, Globe, Layout, Link, Type } from "lucide-react";
 import React from "react";
-import { Button, Input } from "../../commons/components/ui";
+import { FOLDER_ICON_MAP } from "../../commons/components/folderIcons";
+import { Button, Input, Select } from "../../commons/components/ui";
 import { useI18n } from "../../commons/i18n";
 import type { useProfileForm } from "./hooks/useProfileForm";
 
@@ -113,24 +114,28 @@ export const ProfileFormView: React.FC<ProfileFormViewProps> = ({
 
                 {/* Folder picker */}
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-text-secondary">
-                    <span className="flex items-center gap-1.5">
-                      <FolderOpen className="w-4 h-4" />
-                      {t("folders.noFolder")}
-                    </span>
-                  </label>
-                  <select
+                  <Select
+                    label={t("folders.noFolder")}
+                    leftIcon={<FolderOpen className="w-4 h-4" />}
                     value={folderId}
-                    onChange={(e) => setFolderId(e.target.value)}
-                    className="w-full h-10 px-3 rounded-lg bg-bg-card/50 border border-border-default/50 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary focus:border-accent-primary transition-colors appearance-none cursor-pointer"
-                  >
-                    <option value="">{t("folders.noFolder")}</option>
-                    {folders.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.icon} {f.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setFolderId}
+                    options={[
+                      { value: "", label: t("folders.noFolder") },
+                      ...folders.map((f) => {
+                        const IconComponent =
+                          FOLDER_ICON_MAP[f.icon ?? "folder"];
+                        return {
+                          value: f.id,
+                          label: f.name,
+                          icon: IconComponent ? (
+                            <IconComponent className="w-4 h-4" />
+                          ) : undefined,
+                        };
+                      }),
+                    ]}
+                    className="bg-bg-card/50 border-border-default/50"
+                    fullWidth
+                  />
                 </div>
               </div>
             </div>

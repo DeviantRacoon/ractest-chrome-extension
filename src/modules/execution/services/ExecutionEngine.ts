@@ -5,8 +5,8 @@
  */
 
 import type {
-  FailureSignal,
   ConsoleLogEntry,
+  FailureSignal,
   StepExecutionResult,
   TestStep,
 } from "../../../commons/types";
@@ -283,7 +283,7 @@ export class ExecutionEngine {
 
       // VISUAL FEEDBACK
       this.overlay.highlightElement(element, `Executing: ${step.action}`);
-      await this.wait(800); // Wait for user to see the highlight
+      await this.wait(100); // Wait for user to see the highlight
       this.overlay.hide();
 
       await this.performAction(element, step);
@@ -899,7 +899,10 @@ export class ExecutionEngine {
     return `Campo inválido: ${field}`;
   }
 
-  private findVisibleErrorNodes(): Array<{ element: HTMLElement; text: string }> {
+  private findVisibleErrorNodes(): Array<{
+    element: HTMLElement;
+    text: string;
+  }> {
     const strongErrorSelectors = [
       "[data-error]",
       ".errormsg",
@@ -953,7 +956,10 @@ export class ExecutionEngine {
       el.closest(
         '.error, .errors, .field-error, .form-error, .errormsg, [role="alert"], [aria-live]',
       ) || el;
-    return (container.outerHTML || "").replace(/\s+/g, " ").trim().slice(0, 450);
+    return (container.outerHTML || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 450);
   }
 
   private uniqueStrings(values: string[]): string[] {
