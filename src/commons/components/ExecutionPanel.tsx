@@ -21,6 +21,7 @@ import { Button, useToast } from "./ui";
 
 interface ExecutionPanelProps {
   recipe: TestProfile;
+  startFromIndex?: number;
   onClose: () => void;
 }
 
@@ -28,6 +29,7 @@ type ExecutionStatus = "running" | "completed" | "failed" | "cancelled";
 
 export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
   recipe,
+  startFromIndex = 0,
   onClose,
 }) => {
   const { t } = useI18n();
@@ -86,7 +88,7 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
     });
 
     // Execute
-    executionService.executeRecipe(recipe).catch((err) => {
+    executionService.executeRecipe(recipe, startFromIndex).catch((err) => {
       setStatus("failed");
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -126,10 +128,13 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
   const completedCount = stepResults.filter(
     (r) => r.status === "success",
   ).length;
-  const progressPercent = (stepResults.length / recipe.steps.length) * 100;
+  // Only count steps that are actually executed (excluding skipped)
+  const activeStepsCount = recipe.steps.length - startFromIndex;
+  const progressPercent =
+    activeStepsCount > 0 ? (stepResults.length / activeStepsCount) * 100 : 100;
 
-  // Find current active step index
-  const currentStepIndex = stepResults.length;
+  // Current active step index in full list
+  const currentStepIndex = startFromIndex + stepResults.length;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-bg-main/95 backdrop-blur-md animate-fade-in">
@@ -180,12 +185,12 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
                   {recipe.name}
                 </span>
                 <span>•</span>
-                <span className="font-mono">
+                <div className="font-mono text-xs font-medium text-text-primary">
                   {t("execution.stepProgress", {
                     done: completedCount,
-                    total: recipe.steps.length,
+                    total: activeStepsCount,
                   })}
-                </span>
+                </div>
               </div>
             </div>
           </div>
@@ -207,33 +212,42 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
         <div className="relative pl-4 space-y-6 before:absolute before:left-[19px] before:top-2 before:bottom-2 before:w-0.5 before:bg-border-default/30">
           {recipe.steps.map((step, index) => {
             const result = getStepStatus(step.id);
+            const isSkipped = index < startFromIndex;
             const isActive = index === currentStepIndex && status === "running";
-            const isPending = index > currentStepIndex;
+            const isPending = !isSkipped && index > currentStepIndex;
 
             return (
               <div
                 key={step.id}
                 className={`relative pl-8 transition-all duration-300 ${
-                  isActive
-                    ? "opacity-100 scale-100"
-                    : isPending
-                      ? "opacity-40"
-                      : "opacity-80"
+                  isSkipped
+                    ? "opacity-25"
+                    : isActive
+                      ? "opacity-100 scale-100"
+                      : isPending
+                        ? "opacity-40"
+                        : "opacity-80"
                 }`}
               >
                 {/* Timeline Node */}
                 <div
                   className={`absolute left-0 top-1 w-10 h-10 -ml-[19px] rounded-full flex items-center justify-center border-4 transition-colors duration-300 z-10 bg-bg-main ${
-                    isActive
-                      ? "border-accent-primary text-accent-primary shadow-[0_0_15px_rgba(var(--accent-primary),0.3)]"
-                      : result?.status === "success"
-                        ? "border-status-success text-status-success"
-                        : result?.status === "error"
-                          ? "border-status-error text-status-error"
-                          : "border-bg-secondary text-text-muted"
+                    isSkipped
+                      ? "border-border-default text-text-muted"
+                      : isActive
+                        ? "border-accent-primary text-accent-primary shadow-[0_0_15px_rgba(var(--accent-primary),0.3)]"
+                        : result?.status === "success"
+                          ? "border-status-success text-status-success"
+                          : result?.status === "error"
+                            ? "border-status-error text-status-error"
+                            : "border-bg-secondary text-text-muted"
                   }`}
                 >
-                  {isActive ? (
+                  {isSkipped ? (
+                    <span className="font-mono text-xs font-bold">
+                      {index + 1}
+                    </span>
+                  ) : isActive ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : result?.status === "success" ? (
                     <CheckCircle2 className="w-5 h-5" />
@@ -249,11 +263,13 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
                 {/* Card Content */}
                 <div
                   className={`p-4 rounded-xl border transition-all duration-300 ${
-                    isActive
-                      ? "bg-bg-card border-accent-primary/30 shadow-lg"
-                      : result?.status === "error"
-                        ? "bg-status-error/5 border-status-error/20"
-                        : "bg-bg-card/30 border-border-default/50"
+                    isSkipped
+                      ? "bg-bg-card/20 border-border-default/30"
+                      : isActive
+                        ? "bg-bg-card border-accent-primary/30 shadow-lg"
+                        : result?.status === "error"
+                          ? "bg-status-error/5 border-status-error/20"
+                          : "bg-bg-card/30 border-border-default/50"
                   }`}
                 >
                   <div className="flex items-start justify-between mb-1">
@@ -262,7 +278,12 @@ export const ExecutionPanel: React.FC<ExecutionPanelProps> = ({
                     >
                       {step.action}
                     </h4>
-                    {result && (
+                    {isSkipped && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-bg-main text-text-muted border border-border-default/40">
+                        {t("execution.skipped")}
+                      </span>
+                    )}
+                    {!isSkipped && result && (
                       <span
                         className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
                           result.status === "success"

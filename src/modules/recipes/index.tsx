@@ -1,10 +1,12 @@
-import { Bot, Plus, Search } from "lucide-react";
+import { Bot, FolderPlus, Plus, Search } from "lucide-react";
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { useI18n } from "../../commons/i18n";
 import { ExecutionPanel } from "../../commons/components/ExecutionPanel";
+import { FolderCard } from "../../commons/components/FolderCard";
+import { FolderModal } from "../../commons/components/FolderModal";
 import { RecipeCard } from "../../commons/components/RecipeCard";
 import { Button, ConfirmationModal, Input } from "../../commons/components/ui";
+import { useI18n } from "../../commons/i18n";
 import type { useRecipes } from "./hooks/useRecipes";
 
 type RecipesViewProps = ReturnType<typeof useRecipes>;
@@ -13,6 +15,7 @@ export const RecipesView: React.FC<RecipesViewProps> = ({
   searchQuery,
   setSearchQuery,
   loading,
+  folders,
   executingRecipe,
   setExecutingRecipe,
   deleteModalOpen,
@@ -21,16 +24,33 @@ export const RecipesView: React.FC<RecipesViewProps> = ({
   handleEdit,
   handleDeleteRequest,
   handleConfirmDelete,
-  filteredRecipes,
+  recipesByFolder,
+  ungroupedRecipes,
+  folderModalOpen,
+  setFolderModalOpen,
+  editingFolder,
+  handleOpenCreateFolder,
+  handleOpenEditFolder,
+  handleSaveFolder,
+  deleteFolderModalOpen,
+  setDeleteFolderModalOpen,
+  handleDeleteFolderRequest,
+  handleConfirmDeleteFolder,
 }) => {
   const navigate = useNavigate();
   const { t } = useI18n();
+
+  // When searching, auto-expand all folders that have results
+  const isSearching = searchQuery.trim().length > 0;
+  const hasAnyResults =
+    ungroupedRecipes.length > 0 ||
+    folders.some((f) => recipesByFolder(f.id).length > 0);
 
   return (
     <div className="flex flex-col h-full bg-bg-main relative">
       {/* Sticky Header */}
       <div className="sticky top-0 z-20 bg-bg-main/95 backdrop-blur supports-[backdrop-filter]:bg-bg-main/60 border-b border-border-default px-4 py-4 space-y-4">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10">
               <img
@@ -48,21 +68,30 @@ export const RecipesView: React.FC<RecipesViewProps> = ({
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto">
             <Button
               variant="secondary"
               size="sm"
               onClick={() => navigate("/autopilot")}
-              className="shadow-lg shadow-accent-secondary/20 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30"
+              className="shadow-lg shadow-accent-secondary/20 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30 w-full sm:w-auto"
             >
               <Bot className="w-4 h-4 mr-1" />
               <span>{t("recipes.autopilot")}</span>
             </Button>
             <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleOpenCreateFolder}
+              className="border border-border-default/60 hover:border-accent-primary/40 "
+              title={t("folders.new")}
+            >
+              <FolderPlus className="w-4 h-4" />
+            </Button>
+            <Button
               variant="primary"
               size="sm"
               onClick={handleCreateNew}
-              className="shadow-lg shadow-accent-primary/20"
+              className="shadow-lg shadow-accent-primary/20 w-full sm:w-auto"
             >
               <Plus className="w-4 h-4" />
               <span className="ml-1">{t("recipes.new")}</span>
@@ -96,7 +125,8 @@ export const RecipesView: React.FC<RecipesViewProps> = ({
           </div>
         ) : (
           <div className="space-y-3 pb-20">
-            {filteredRecipes.length === 0 ? (
+            {/* Empty state */}
+            {!hasAnyResults && (
               <div
                 className="flex flex-col items-center justify-center py-12 text-center opacity-0 animate-fade-in"
                 style={{ animationFillMode: "forwards" }}
@@ -125,17 +155,37 @@ export const RecipesView: React.FC<RecipesViewProps> = ({
                   </Button>
                 )}
               </div>
-            ) : (
-              filteredRecipes.map((recipe) => (
-                <RecipeCard
-                  key={recipe.id}
-                  recipe={recipe}
-                  onRun={setExecutingRecipe}
-                  onEdit={handleEdit}
-                  onDelete={handleDeleteRequest}
-                />
-              ))
             )}
+
+            {/* Folder cards */}
+            {folders.map((folder) => {
+              const folderRecipes = recipesByFolder(folder.id);
+              if (isSearching && folderRecipes.length === 0) return null;
+              return (
+                <FolderCard
+                  key={folder.id}
+                  folder={folder}
+                  recipes={folderRecipes}
+                  forceOpen={isSearching}
+                  onEdit={handleOpenEditFolder}
+                  onDelete={handleDeleteFolderRequest}
+                  onRunRecipe={setExecutingRecipe}
+                  onEditRecipe={handleEdit}
+                  onDeleteRecipe={handleDeleteRequest}
+                />
+              );
+            })}
+
+            {/* Ungrouped recipes */}
+            {ungroupedRecipes.map((recipe) => (
+              <RecipeCard
+                key={recipe.id}
+                recipe={recipe}
+                onRun={setExecutingRecipe}
+                onEdit={handleEdit}
+                onDelete={handleDeleteRequest}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -143,12 +193,21 @@ export const RecipesView: React.FC<RecipesViewProps> = ({
       {/* Execution Panel Modal */}
       {executingRecipe && (
         <ExecutionPanel
-          recipe={executingRecipe}
+          recipe={executingRecipe.recipe}
+          startFromIndex={executingRecipe.startFromIndex}
           onClose={() => setExecutingRecipe(null)}
         />
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Folder Create/Edit Modal */}
+      <FolderModal
+        isOpen={folderModalOpen}
+        folder={editingFolder}
+        onSave={handleSaveFolder}
+        onClose={() => setFolderModalOpen(false)}
+      />
+
+      {/* Delete Flow Confirmation Modal */}
       <ConfirmationModal
         isOpen={deleteModalOpen}
         title={t("recipes.delete.title")}
@@ -157,6 +216,18 @@ export const RecipesView: React.FC<RecipesViewProps> = ({
         cancelText={t("recipes.delete.cancel")}
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteModalOpen(false)}
+        variant="danger"
+      />
+
+      {/* Delete Folder Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={deleteFolderModalOpen}
+        title={t("folders.delete.title")}
+        message={t("folders.delete.message")}
+        confirmText={t("folders.delete.confirm")}
+        cancelText={t("folders.delete.cancel")}
+        onConfirm={handleConfirmDeleteFolder}
+        onCancel={() => setDeleteFolderModalOpen(false)}
         variant="danger"
       />
     </div>

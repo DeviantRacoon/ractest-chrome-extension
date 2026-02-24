@@ -124,6 +124,29 @@ const en = {
   "about.community": "Made for the testing community.",
   "about.close": "Close",
 
+  "folders.new": "New Folder",
+  "folders.edit": "Edit folder",
+  "folders.flowCount": "{{count}} flows",
+  "folders.empty": "No flows in this folder",
+  "folders.noFolder": "No folder",
+  "folders.modal.createTitle": "New Folder",
+  "folders.modal.editTitle": "Edit Folder",
+  "folders.modal.name": "Folder name",
+  "folders.modal.namePlaceholder": "E.g: Google",
+  "folders.modal.nameRequired": "Name is required",
+  "folders.modal.icon": "Icon",
+  "folders.modal.save": "Save",
+  "folders.modal.cancel": "Cancel",
+  "folders.delete.title": "Delete Folder",
+  "folders.delete.message":
+    "This will delete the folder but NOT the flows inside. Flows will become ungrouped.",
+  "folders.delete.confirm": "Delete",
+  "folders.delete.cancel": "Cancel",
+  "folders.toast.created": "Folder created",
+  "folders.toast.updated": "Folder updated",
+  "folders.toast.deleted": "Folder deleted",
+  "folders.toast.error": "Error saving folder",
+
   "recipes.title": "My Flows",
   "recipes.subtitle": "Manage your test flows",
   "recipes.autopilot": "Autopilot",
@@ -147,6 +170,9 @@ const en = {
   "recipes.toast.loadError": "Error loading flows",
   "recipes.toast.deleted": "Flow deleted successfully",
   "recipes.toast.deleteError": "Error deleting flow",
+
+  "execution.startFromDropdown": "Start from...",
+  "execution.skipped": "Skipped",
 
   "autopilot.subtitle": "Autonomous browsing agent",
   "autopilot.apiKey.required": "An API Key is required to use autopilot. Go to",
@@ -223,8 +249,7 @@ const en = {
   "history.details.telemetry.observeMs": "Observe total",
   "history.details.telemetry.actMs": "Act total",
   "history.details.telemetry.replanReasons": "Replan reasons",
-  "history.details.telemetry.noReplanReasons":
-    "No replan reasons captured",
+  "history.details.telemetry.noReplanReasons": "No replan reasons captured",
 
   "profile.new": "New flow",
   "profile.edit": "Edit flow",
@@ -284,7 +309,8 @@ const en = {
   "stepEditor.aiModal.promptPlaceholder":
     "E.g: Fill the registration form with valid data...",
   "stepEditor.aiModal.readingModeLabel": "Reading Mode:",
-  "stepEditor.aiModal.readingMode.fast.title": "Fast: Interactive elements only",
+  "stepEditor.aiModal.readingMode.fast.title":
+    "Fast: Interactive elements only",
   "stepEditor.aiModal.readingMode.normal.title": "Normal: Smart context",
   "stepEditor.aiModal.readingMode.complex.title": "Complex: Full scan",
   "stepEditor.aiModal.readingMode.fast.description":

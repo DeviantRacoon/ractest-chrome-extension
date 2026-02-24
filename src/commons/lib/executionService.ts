@@ -4,15 +4,15 @@
  * for recipe execution. Handles sending commands and receiving results.
  */
 
+import { roles } from "aria-query";
 import type {
   CapturedErrorSubtype,
   FailureSignal,
   StepExecutionResult,
-  TestStep,
   TestProfile,
+  TestStep,
 } from "../types";
 import type { ContentToPopupMessage } from "../types/messages";
-import { roles } from "aria-query";
 
 type StepResultCallback = (result: StepExecutionResult) => void;
 type ExecutionCompleteCallback = (results: StepExecutionResult[]) => void;
@@ -171,7 +171,10 @@ export class ExecutionService {
   /**
    * Execute a recipe on the current tab with persistence support.
    */
-  public async executeRecipe(recipe: TestProfile): Promise<void> {
+  public async executeRecipe(
+    recipe: TestProfile,
+    startFromIndex = 0,
+  ): Promise<void> {
     if (typeof chrome === "undefined" || !chrome.tabs) {
       console.warn("[ExecutionService] Not running as Chrome extension");
       return;
@@ -201,13 +204,16 @@ export class ExecutionService {
       await this.waitForPageLoad(tab.id);
     }
 
+    // Slice steps to honour startFromIndex
+    const stepsToRun = recipe.steps.slice(startFromIndex);
+
     // Execute steps one by one
     const results: StepExecutionResult[] = [];
     this.executionLogs = []; // Reset logs
 
     try {
       // Execute steps one by one
-      for (const step of recipe.steps) {
+      for (const step of stepsToRun) {
         // Check for cancellation
         if (!this.currentTabId) {
           const result: StepExecutionResult = {
@@ -684,7 +690,8 @@ export class ExecutionService {
         statusText?: string;
         error?: string;
       };
-      if (net.error) return `${net.method || "REQUEST"} ${net.url || ""} ${net.error}`.trim();
+      if (net.error)
+        return `${net.method || "REQUEST"} ${net.url || ""} ${net.error}`.trim();
       if (typeof net.status === "number") {
         return `${net.method || "REQUEST"} ${net.url || ""} ${net.status} ${net.statusText || ""}`.trim();
       }
@@ -844,7 +851,9 @@ export class ExecutionService {
   }
 
   private getNormalizedRole(role: string): string {
-    return String(role || "").trim().toLowerCase();
+    return String(role || "")
+      .trim()
+      .toLowerCase();
   }
 
   private isKnownAriaRole(role: string): boolean {
@@ -962,7 +971,10 @@ export class ExecutionService {
       const role = this.getNormalizedRole(item.role);
       if (!role) return true;
       if (!this.isKnownAriaRole(role)) return true;
-      return !this.isAlertLikeRole(role) || /success|created|saved|completed|welcome/i.test(text);
+      return (
+        !this.isAlertLikeRole(role) ||
+        /success|created|saved|completed|welcome/i.test(text)
+      );
     });
     if (hasSuccessText) {
       score -= 4;
@@ -1046,7 +1058,9 @@ export class ExecutionService {
         };
       }
 
-      const latestSnapshot = evidence.snapshots[evidence.snapshots.length - 1] || {
+      const latestSnapshot = evidence.snapshots[
+        evidence.snapshots.length - 1
+      ] || {
         url: recipe.url,
         title: "",
         feedbackItems: [],
@@ -1146,8 +1160,7 @@ export class ExecutionService {
       return {
         ...deterministic,
         rationale:
-          deterministic.rationale +
-          ` AI final check failed: ${String(error)}`,
+          deterministic.rationale + ` AI final check failed: ${String(error)}`,
         signals: [...deterministic.signals, "ai_error"],
       };
     }

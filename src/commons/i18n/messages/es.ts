@@ -21,27 +21,36 @@ const es = {
   "settings.language": "Idioma",
   "settings.language.auto": "Automático (Sistema)",
   "settings.language.system": "Idioma del sistema: {{language}}",
-  "settings.language.helper": "El inglés es el idioma por defecto. Elige Automático para usar el idioma de tu navegador/sistema.",
+  "settings.language.helper":
+    "El inglés es el idioma por defecto. Elige Automático para usar el idioma de tu navegador/sistema.",
   "settings.language.es": "Español",
   "settings.language.en": "Inglés",
 
   "settings.apiKey.label": "OpenRouter API Key",
-  "settings.apiKey.helper": "Necesaria para usar las funciones de IA. (Debe empezar con 'sk-or-')",
+  "settings.apiKey.helper":
+    "Necesaria para usar las funciones de IA. (Debe empezar con 'sk-or-')",
   "settings.apiKey.error": "Formato de API Key inválido",
   "settings.aiTesting.label": "Usar IA en tests",
   "settings.aiTesting.enabled": "Activado",
   "settings.aiTesting.disabled": "Desactivado",
-  "settings.aiTesting.helper": "Al desactivarlo, la validación del test usa solo reglas determinísticas y omite llamadas a IA.",
+  "settings.aiTesting.helper":
+    "Al desactivarlo, la validación del test usa solo reglas determinísticas y omite llamadas a IA.",
 
   "settings.aiModel": "Modelo IA",
   "settings.aiModel.placeholder": "ej: anthropic/claude-3-5-sonnet",
-  "settings.aiModel.helper": "ID del modelo (ej: google/gemini-2.0-flash-exp:free)",
-  "settings.aiModel.recommended.aria": "Ver modelos recomendados para este proyecto",
+  "settings.aiModel.helper":
+    "ID del modelo (ej: google/gemini-2.0-flash-exp:free)",
+  "settings.aiModel.recommended.aria":
+    "Ver modelos recomendados para este proyecto",
   "settings.aiModel.recommended.title": "Modelos recomendados",
-  "settings.aiModel.recommended.auto": "openrouter/auto: recomendado para testing general con enrutamiento inteligente.",
-  "settings.aiModel.recommended.free": "openrouter/free: útil para pruebas masivas de bajo costo.",
-  "settings.aiModel.recommended.stable1": "openai/gpt-5.1: baseline estable para comparar resultados.",
-  "settings.aiModel.recommended.stable2": "anthropic/claude-sonnet-4.5: alternativa sólida para A/B en calidad.",
+  "settings.aiModel.recommended.auto":
+    "openrouter/auto: recomendado para testing general con enrutamiento inteligente.",
+  "settings.aiModel.recommended.free":
+    "openrouter/free: útil para pruebas masivas de bajo costo.",
+  "settings.aiModel.recommended.stable1":
+    "openai/gpt-5.1: baseline estable para comparar resultados.",
+  "settings.aiModel.recommended.stable2":
+    "anthropic/claude-sonnet-4.5: alternativa sólida para A/B en calidad.",
 
   "settings.aiMaxTokens": "Max Tokens",
   "settings.aiMaxTokens.helper": "Límite de respuesta",
@@ -55,10 +64,12 @@ const es = {
   "settings.agentMode": "Modo de Ejecución del Agente",
   "settings.agentMode.strict": "Estricto (Fail-Fast)",
   "settings.agentMode.balanced": "Balanceado",
-  "settings.agentMode.help": "Estricto se detiene ante errores visuales/runtime. Balanceado permite recuperación limitada en pasos no críticos.",
+  "settings.agentMode.help":
+    "Estricto se detiene ante errores visuales/runtime. Balanceado permite recuperación limitada en pasos no críticos.",
 
   "settings.note.title": "Nota:",
-  "settings.note.body": "El límite de pasos evita que el agente entre en bucles infinitos o consuma demasiados recursos. El valor por defecto es 20. Para flujos de testing confiables usa modo estricto y reintentos no críticos en 0.",
+  "settings.note.body":
+    "El límite de pasos evita que el agente entre en bucles infinitos o consuma demasiados recursos. El valor por defecto es 20. Para flujos de testing confiables usa modo estricto y reintentos no críticos en 0.",
 
   "settings.highlightColor": "Color de Resaltado",
 
@@ -68,7 +79,8 @@ const es = {
   "settings.resetAll.desc": "Borrar flujos, historial y configuración",
 
   "settings.confirmReset.title": "Restablecer Todo",
-  "settings.confirmReset.message": "¿Estás seguro de que quieres borrar TODOS tus flujos, historial y configuración? Esta acción no se puede deshacer y perderás todos tus datos.",
+  "settings.confirmReset.message":
+    "¿Estás seguro de que quieres borrar TODOS tus flujos, historial y configuración? Esta acción no se puede deshacer y perderás todos tus datos.",
   "settings.confirmReset.confirm": "Borrar Todo",
   "settings.confirmReset.cancel": "Cancelar",
 
@@ -99,9 +111,11 @@ const es = {
 
   "about.version": "Versión {{version}}",
   "about.section.about": "Acerca de RacTest",
-  "about.description": "Extensión para crear y ejecutar pruebas web con enfoque local-first y asistencia de IA.",
+  "about.description":
+    "Extensión para crear y ejecutar pruebas web con enfoque local-first y asistencia de IA.",
   "about.section.privacy": "Privacidad y Seguridad",
-  "about.privacy.item1": "Datos, historial y configuración guardados localmente.",
+  "about.privacy.item1":
+    "Datos, historial y configuración guardados localmente.",
   "about.privacy.item2": "Sin servidores propios y sin rastreo de navegación.",
   "about.privacy.item3": "API Key encriptada y usada solo al invocar IA.",
   "about.privacy.link": "Ver política completa",
@@ -112,6 +126,29 @@ const es = {
   "about.community": "Hecho para la comunidad de testing.",
   "about.close": "Cerrar",
 
+  "folders.new": "Nueva Carpeta",
+  "folders.edit": "Editar carpeta",
+  "folders.flowCount": "{{count}} flujos",
+  "folders.empty": "No hay flujos en esta carpeta",
+  "folders.noFolder": "Sin carpeta",
+  "folders.modal.createTitle": "Nueva Carpeta",
+  "folders.modal.editTitle": "Editar Carpeta",
+  "folders.modal.name": "Nombre de la carpeta",
+  "folders.modal.namePlaceholder": "Ej: Google",
+  "folders.modal.nameRequired": "El nombre es requerido",
+  "folders.modal.icon": "Ícono",
+  "folders.modal.save": "Guardar",
+  "folders.modal.cancel": "Cancelar",
+  "folders.delete.title": "Eliminar Carpeta",
+  "folders.delete.message":
+    "Se eliminará la carpeta pero NO los flujos dentro. Los flujos quedarán sin carpeta.",
+  "folders.delete.confirm": "Eliminar",
+  "folders.delete.cancel": "Cancelar",
+  "folders.toast.created": "Carpeta creada",
+  "folders.toast.updated": "Carpeta actualizada",
+  "folders.toast.deleted": "Carpeta eliminada",
+  "folders.toast.error": "Error al guardar la carpeta",
+
   "recipes.title": "Mis Flujos",
   "recipes.subtitle": "Gestiona tus flujos de prueba",
   "recipes.autopilot": "Autopilot",
@@ -120,10 +157,12 @@ const es = {
   "recipes.empty.noResults": "Sin resultados",
   "recipes.empty.noFlows": "No hay flujos",
   "recipes.empty.trySearch": "Intenta con otros términos de búsqueda",
-  "recipes.empty.createFirst": "Crea tu primer flujo para comenzar a automatizar",
+  "recipes.empty.createFirst":
+    "Crea tu primer flujo para comenzar a automatizar",
   "recipes.empty.createButton": "Crear flujo",
   "recipes.delete.title": "Eliminar Flujo",
-  "recipes.delete.message": "¿Estás seguro de que deseas eliminar este flujo? Esta acción no se puede deshacer.",
+  "recipes.delete.message":
+    "¿Estás seguro de que deseas eliminar este flujo? Esta acción no se puede deshacer.",
   "recipes.delete.confirm": "Eliminar",
   "recipes.delete.cancel": "Cancelar",
   "recipes.untitled": "Flujo sin nombre",
@@ -135,12 +174,17 @@ const es = {
   "recipes.toast.deleted": "Flujo eliminado correctamente",
   "recipes.toast.deleteError": "Error al eliminar el flujo",
 
+  "execution.startFromDropdown": "Empezar desde...",
+  "execution.skipped": "Omitido",
+
   "autopilot.subtitle": "Agente autónomo de navegación",
-  "autopilot.apiKey.required": "Se requiere una API Key para usar el piloto automático. Ve a",
+  "autopilot.apiKey.required":
+    "Se requiere una API Key para usar el piloto automático. Ve a",
   "autopilot.apiKey.settings": "Ajustes",
   "autopilot.apiKey.toConfigure": "para configurarla.",
   "autopilot.helper.title": "¿Cómo funciona?",
-  "autopilot.helper.body": "El piloto automático analiza la página web, identifica elementos interactivos y toma decisiones basadas en tu objetivo utilizando IA avanzada.",
+  "autopilot.helper.body":
+    "El piloto automático analiza la página web, identifica elementos interactivos y toma decisiones basadas en tu objetivo utilizando IA avanzada.",
   "autopilot.live.title": "Ejecución en vivo",
   "autopilot.running": "RUNNING",
   "autopilot.clearLogs": "Limpiar logs y reiniciar",
@@ -148,24 +192,30 @@ const es = {
   "autopilot.startUrl": "URL Inicial",
   "autopilot.useCurrentUrl": "Usar URL actual",
   "autopilot.goal": "Objetivo",
-  "autopilot.goalPlaceholder": "Ej: Navegar a la página de precios, buscar el plan Pro y verificar que cuesta $20...",
+  "autopilot.goalPlaceholder":
+    "Ej: Navegar a la página de precios, buscar el plan Pro y verificar que cuesta $20...",
   "autopilot.run.needApiKey": "Configura tu API Key para iniciar",
   "autopilot.run.start": "Iniciar",
-  "autopilot.adaptiveMode.desc": "La lectura adaptativa es automática: Autopilot ajusta la profundidad según cambios del DOM y finaliza con una verificación QA final.",
+  "autopilot.adaptiveMode.desc":
+    "La lectura adaptativa es automática: Autopilot ajusta la profundidad según cambios del DOM y finaliza con una verificación QA final.",
   "autopilot.readingMode": "Modo de Lectura",
   "autopilot.readingMode.fast": "Rápido",
   "autopilot.readingMode.normal": "Normal",
   "autopilot.readingMode.complex": "Complejo",
-  "autopilot.readingMode.fastDesc": "Rápido: solo detecta botones, enlaces e inputs básicos. Ideal para velocidad en sitios simples.",
-  "autopilot.readingMode.normalDesc": "Normal: añade contexto inteligente y etiquetas. El balance perfecto para la mayoría de tareas.",
-  "autopilot.readingMode.complexDesc": "Complejo: escaneo profundo de todo el DOM. Úsalo si no detecta elementos en apps complejas (React/Angular).",
+  "autopilot.readingMode.fastDesc":
+    "Rápido: solo detecta botones, enlaces e inputs básicos. Ideal para velocidad en sitios simples.",
+  "autopilot.readingMode.normalDesc":
+    "Normal: añade contexto inteligente y etiquetas. El balance perfecto para la mayoría de tareas.",
+  "autopilot.readingMode.complexDesc":
+    "Complejo: escaneo profundo de todo el DOM. Úsalo si no detecta elementos en apps complejas (React/Angular).",
   "autopilot.skills.title": "Habilidades del Agente",
   "autopilot.skill.click.desc": "Interactúa con botones y enlaces",
   "autopilot.skill.type.desc": "Escribe en campos de texto",
   "autopilot.skill.assert.desc": "Verifica contenido y estados",
   "autopilot.skill.select.desc": "Elige opciones en menús",
   "autopilot.skill.navigate.desc": "Navega entre páginas",
-  "autopilot.toast.noApiKey": "Error: No se encontró la API Key. Configúrala en Ajustes.",
+  "autopilot.toast.noApiKey":
+    "Error: No se encontró la API Key. Configúrala en Ajustes.",
 
   "history.title": "Historial",
   "history.subtitle": "Registro de ejecuciones recientes",
@@ -174,7 +224,8 @@ const es = {
   "history.unnamed": "Flujo sin nombre",
   "history.stepCount": "{{count}} pasos",
   "history.clear.title": "Borrar Historial",
-  "history.clear.message": "¿Estás seguro de que quieres borrar todo el historial? Esta acción no se puede deshacer.",
+  "history.clear.message":
+    "¿Estás seguro de que quieres borrar todo el historial? Esta acción no se puede deshacer.",
   "history.clear.confirm": "Borrar Todo",
   "history.clear.cancel": "Cancelar",
   "history.toast.loadError": "Error al cargar el historial",
@@ -257,39 +308,56 @@ const es = {
   "stepEditor.aiModal.title": "Generar con IA",
   "stepEditor.aiModal.close": "Cerrar modal",
   "stepEditor.aiModal.loading.title": "Analizando el sitio web...",
-  "stepEditor.aiModal.loading.body": "Estamos destilando el HTML y generando los pasos.",
+  "stepEditor.aiModal.loading.body":
+    "Estamos destilando el HTML y generando los pasos.",
   "stepEditor.aiModal.promptLabel": "¿Qué quieres probar?",
-  "stepEditor.aiModal.promptPlaceholder": "Ej: Rellena el formulario de registro con datos válidos...",
+  "stepEditor.aiModal.promptPlaceholder":
+    "Ej: Rellena el formulario de registro con datos válidos...",
   "stepEditor.aiModal.readingModeLabel": "Modo de Lectura:",
   "stepEditor.aiModal.readingMode.fast.title": "Rápido: Solo interactivos",
   "stepEditor.aiModal.readingMode.normal.title": "Normal: Contexto inteligente",
   "stepEditor.aiModal.readingMode.complex.title": "Complejo: Escaneo completo",
-  "stepEditor.aiModal.readingMode.fast.description": "Rápido: solo detecta botones, enlaces e inputs básicos. Ideal para velocidad en sitios simples.",
-  "stepEditor.aiModal.readingMode.normal.description": "Normal: añade contexto inteligente y etiquetas. El balance perfecto para la mayoría de tareas.",
-  "stepEditor.aiModal.readingMode.complex.description": "Complejo: escaneo profundo de todo el DOM. Úsalo si no detecta elementos en apps complejas (React/Angular).",
-  "stepEditor.aiModal.tip.fast": "La IA analizará la pantalla actual para generar los pasos.",
-  "stepEditor.aiModal.tip.normalComplex": "La IA analizará la pantalla actual y su contexto para generar los pasos.",
+  "stepEditor.aiModal.readingMode.fast.description":
+    "Rápido: solo detecta botones, enlaces e inputs básicos. Ideal para velocidad en sitios simples.",
+  "stepEditor.aiModal.readingMode.normal.description":
+    "Normal: añade contexto inteligente y etiquetas. El balance perfecto para la mayoría de tareas.",
+  "stepEditor.aiModal.readingMode.complex.description":
+    "Complejo: escaneo profundo de todo el DOM. Úsalo si no detecta elementos en apps complejas (React/Angular).",
+  "stepEditor.aiModal.tip.fast":
+    "La IA analizará la pantalla actual para generar los pasos.",
+  "stepEditor.aiModal.tip.normalComplex":
+    "La IA analizará la pantalla actual y su contexto para generar los pasos.",
   "stepEditor.aiModal.cancel": "Cancelar",
   "stepEditor.aiModal.generate": "Generar Pasos",
   "stepEditor.emptyTitle": "Sin pasos configurados",
-  "stepEditor.emptyBody": "Usa el botón \"Capturar Paso\" para seleccionar elementos de la página web y crear tu flujo de prueba.",
+  "stepEditor.emptyBody":
+    'Usa el botón "Capturar Paso" para seleccionar elementos de la página web y crear tu flujo de prueba.',
   "stepEditor.toast.loadError": "Error al cargar el flujo",
   "stepEditor.toast.captureStep": "Paso capturado: {{action}} en {{tag}}",
-  "stepEditor.toast.activateInspectorError": "Error al activar el inspector. Asegúrate de estar en una pestaña web válida.",
+  "stepEditor.toast.activateInspectorError":
+    "Error al activar el inspector. Asegúrate de estar en una pestaña web válida.",
   "stepEditor.toast.noUrl": "No hay URL configurada para este flujo",
-  "stepEditor.toast.extensionOnly": "Esta función solo está disponible en la extensión de Chrome",
+  "stepEditor.toast.extensionOnly":
+    "Esta función solo está disponible en la extensión de Chrome",
   "stepEditor.toast.openInspectorOk": "Pestaña abierta e inspector activado",
-  "stepEditor.toast.openUrlError": "Error al abrir la URL. Intenta manualmente.",
-  "stepEditor.toast.highlightError": "No se pudo resaltar el elemento. Asegúrate de que la página esté cargada.",
-  "stepEditor.toast.typeNeedsValue": "El paso {{order}} (TYPE) requiere un valor",
-  "stepEditor.toast.selectNeedsValue": "El paso {{order}} (SELECT) requiere un valor",
-  "stepEditor.toast.selectorMissing": "El paso {{order}} no tiene un selector válido",
+  "stepEditor.toast.openUrlError":
+    "Error al abrir la URL. Intenta manualmente.",
+  "stepEditor.toast.highlightError":
+    "No se pudo resaltar el elemento. Asegúrate de que la página esté cargada.",
+  "stepEditor.toast.typeNeedsValue":
+    "El paso {{order}} (TYPE) requiere un valor",
+  "stepEditor.toast.selectNeedsValue":
+    "El paso {{order}} (SELECT) requiere un valor",
+  "stepEditor.toast.selectorMissing":
+    "El paso {{order}} no tiene un selector válido",
   "stepEditor.toast.saved": "Flujo guardado correctamente",
   "stepEditor.toast.saveError": "Error al guardar el flujo",
   "stepEditor.toast.aiGenerated": "¡Generados {{count}} pasos con IA!",
-  "stepEditor.toast.aiNoSteps": "La IA no generó ningún paso. Intenta ser más específico.",
+  "stepEditor.toast.aiNoSteps":
+    "La IA no generó ningún paso. Intenta ser más específico.",
   "stepEditor.toast.aiConnectError": "Error al conectar con la IA.",
-  "stepEditor.toast.noApiKey": "Error: No se encontró la API Key. Configúrala en Ajustes.",
+  "stepEditor.toast.noApiKey":
+    "Error: No se encontró la API Key. Configúrala en Ajustes.",
 
   "execution.failedToast": "La ejecución falló: {{error}}",
   "execution.unknownError": "Error desconocido",
@@ -311,10 +379,12 @@ const es = {
   "toast.settings.languageError": "No se pudo guardar el idioma",
   "toast.export.success": "Datos exportados correctamente",
   "toast.export.error": "Error al exportar datos",
-  "toast.import.confirm": "Importar datos sobrescribirá los flujos existentes con el mismo ID. ¿Continuar?",
-  "toast.import.success": "Importación completa: {{imported}} flujos ({{created}} nuevos, {{updated}} actualizados)",
+  "toast.import.confirm":
+    "Importar datos sobrescribirá los flujos existentes con el mismo ID. ¿Continuar?",
+  "toast.import.success":
+    "Importación completa: {{imported}} flujos ({{created}} nuevos, {{updated}} actualizados)",
   "toast.import.error": "Error al importar el archivo: Formato inválido",
-  "toast.reset.error": "Error al restablecer los datos"
+  "toast.reset.error": "Error al restablecer los datos",
 } as const;
 
 export default es;
