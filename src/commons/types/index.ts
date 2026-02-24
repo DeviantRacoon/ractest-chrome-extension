@@ -100,6 +100,7 @@ export type ActionType =
   | "UNCHECK"
   | "DIVIDER"
   | "ASSERT"
+  | "RECIPE"
   | "FINISH";
 
 /**
@@ -239,6 +240,7 @@ export type AppLanguagePreference = AppLanguage | "auto";
  */
 export interface UserSettings {
   defaultDelay: number; // default delay in ms
+  finalValidationDelay?: number; // delay for final recipe validation in ms
   theme: "dark" | "light"; // theme preference (future)
   language: AppLanguagePreference; // UI language preference
   highlightColor: string; // inspector highlight color
