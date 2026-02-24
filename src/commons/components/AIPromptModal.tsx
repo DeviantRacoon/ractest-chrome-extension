@@ -1,5 +1,6 @@
 import { Sparkles, X } from "lucide-react";
 import React, { useState } from "react";
+import { useI18n } from "../i18n";
 import { Button } from "./ui";
 
 interface AIPromptModalProps {
@@ -18,6 +19,7 @@ export const AIPromptModal: React.FC<AIPromptModalProps> = ({
   onSubmit,
   loading,
 }) => {
+  const { t } = useI18n();
   const [prompt, setPrompt] = useState("");
   const [mode, setMode] = useState<"fast" | "normal" | "complex">("normal");
 
@@ -39,12 +41,13 @@ export const AIPromptModal: React.FC<AIPromptModalProps> = ({
           <div className="flex items-center gap-2 text-accent-primary">
             <Sparkles className="w-5 h-5" />
             <h3 className="font-semibold text-lg text-text-primary">
-              Generar con IA
+              {t("stepEditor.aiModal.title")}
             </h3>
           </div>
           <button
             onClick={onClose}
             disabled={loading}
+            aria-label={t("stepEditor.aiModal.close")}
             className="text-text-muted hover:text-text-primary transition-colors p-1 rounded-md hover:bg-bg-secondary"
           >
             <X className="w-5 h-5" />
@@ -63,10 +66,10 @@ export const AIPromptModal: React.FC<AIPromptModalProps> = ({
               </div>
               <div className="text-center space-y-1">
                 <p className="text-sm font-medium text-text-primary">
-                  Analizando el sitio web...
+                  {t("stepEditor.aiModal.loading.title")}
                 </p>
                 <p className="text-xs text-text-muted">
-                  Estamos destilando el HTML y generando los pasos.
+                  {t("stepEditor.aiModal.loading.body")}
                 </p>
               </div>
             </div>
@@ -74,12 +77,12 @@ export const AIPromptModal: React.FC<AIPromptModalProps> = ({
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-text-secondary">
-                  ¿Qué quieres probar?
+                  {t("stepEditor.aiModal.promptLabel")}
                 </label>
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Ej: Rellena el formulario de registro con datos válidos..."
+                  placeholder={t("stepEditor.aiModal.promptPlaceholder")}
                   className="w-full h-32 px-4 py-3 bg-bg-main border border-border-default rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary transition-all resize-none text-sm placeholder:text-text-muted/50"
                   autoFocus
                 />
@@ -87,13 +90,13 @@ export const AIPromptModal: React.FC<AIPromptModalProps> = ({
 
               <div className="flex justify-between items-center bg-bg-secondary/20 p-2 rounded-lg border border-border-default/50">
                 <span className="text-xs font-medium text-text-secondary ml-1">
-                  Modo de Lectura:
+                  {t("stepEditor.aiModal.readingModeLabel")}
                 </span>
                 <div className="flex bg-bg-main border border-border-default rounded-lg p-0.5">
                   <button
                     type="button"
                     onClick={() => setMode("fast")}
-                    title="Rápido: Solo interactivos"
+                    title={t("stepEditor.aiModal.readingMode.fast.title")}
                     className={`p-1.5 rounded-md transition-all ${
                       mode === "fast"
                         ? "bg-accent-primary/10 text-accent-primary shadow-sm"
@@ -117,7 +120,7 @@ export const AIPromptModal: React.FC<AIPromptModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setMode("normal")}
-                    title="Normal: Contexto Inteligente"
+                    title={t("stepEditor.aiModal.readingMode.normal.title")}
                     className={`p-1.5 rounded-md transition-all ${
                       mode === "normal"
                         ? "bg-accent-primary/10 text-accent-primary shadow-sm"
@@ -142,7 +145,7 @@ export const AIPromptModal: React.FC<AIPromptModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setMode("complex")}
-                    title="Complejo: Escaneo Completo"
+                    title={t("stepEditor.aiModal.readingMode.complex.title")}
                     className={`p-1.5 rounded-md transition-all ${
                       mode === "complex"
                         ? "bg-accent-primary/10 text-accent-primary shadow-sm"
@@ -175,21 +178,17 @@ export const AIPromptModal: React.FC<AIPromptModalProps> = ({
                 <p className="text-[10px] text-text-muted leading-relaxed">
                   {mode === "fast" && (
                     <span className="animate-fade-in">
-                      <strong>Rápido:</strong> Solo detecta botones, enlaces e
-                      inputs básicos. Ideal para velocidad en sitios simples.
+                      {t("stepEditor.aiModal.readingMode.fast.description")}
                     </span>
                   )}
                   {mode === "normal" && (
                     <span className="animate-fade-in">
-                      <strong>Normal:</strong> Añade contexto inteligente y
-                      etiquetas. El balance perfecto para la mayoría de tareas.
+                      {t("stepEditor.aiModal.readingMode.normal.description")}
                     </span>
                   )}
                   {mode === "complex" && (
                     <span className="animate-fade-in">
-                      <strong>Complejo:</strong> Escaneo profundo de todo el
-                      DOM. Úsalo si no detecta elementos en apps complejas
-                      (React/Angular).
+                      {t("stepEditor.aiModal.readingMode.complex.description")}
                     </span>
                   )}
                 </p>
@@ -198,8 +197,9 @@ export const AIPromptModal: React.FC<AIPromptModalProps> = ({
               <div className="bg-accent-primary/5 p-3 rounded-lg border border-accent-primary/10">
                 <p className="text-xs text-text-muted flex gap-2">
                   <Sparkles className="w-4 h-4 text-accent-primary shrink-0" />
-                  La IA analizará la pantalla actual{" "}
-                  {mode !== "fast" && "y su contexto"} para generar los pasos.
+                  {mode === "fast"
+                    ? t("stepEditor.aiModal.tip.fast")
+                    : t("stepEditor.aiModal.tip.normalComplex")}
                 </p>
               </div>
 
@@ -210,7 +210,7 @@ export const AIPromptModal: React.FC<AIPromptModalProps> = ({
                   type="button"
                   fullWidth
                 >
-                  Cancelar
+                  {t("stepEditor.aiModal.cancel")}
                 </Button>
                 <Button
                   variant="primary"
@@ -219,7 +219,7 @@ export const AIPromptModal: React.FC<AIPromptModalProps> = ({
                   fullWidth
                   className="shadow-lg shadow-accent-primary/20"
                 >
-                  Generar Pasos
+                  {t("stepEditor.aiModal.generate")}
                 </Button>
               </div>
             </form>

@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { useI18n } from "../../../commons/i18n";
 import type { RecipeExecutionResult } from "../../../commons/types";
 import { Button } from "../../../commons/components/ui";
+import { AutopilotTelemetrySummary } from "./AutopilotTelemetrySummary";
 
 interface HistoryDetailsViewProps {
   result: RecipeExecutionResult;
@@ -102,6 +103,8 @@ export const HistoryDetailsView: React.FC<HistoryDetailsViewProps> = ({
             )}
           </div>
         )}
+
+        <AutopilotTelemetrySummary result={result} />
 
         <div className="flex border-b border-border-default/50">
           <button

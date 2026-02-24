@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Create Account • Bootstrap SaaS</title>
+    <title>Create Account • NovaCloud</title>
 
-    <!-- Bootstrap 5 -->
+    <!-- Bootstrap 5 (layout/utilities only) -->
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet"
@@ -15,383 +15,634 @@
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
       rel="stylesheet"
     />
+
+    <style>
+      :root {
+        /* Google-ish neutrals */
+        --bg: #f8f9fa;
+        --card: #ffffff;
+        --ink: #202124;
+        --muted: #5f6368;
+        --line: #dadce0;
+
+        --brand: #1a73e8; /* Google blue vibe */
+        --brand-hover: #1967d2;
+
+        --radius: 10px; /* card */
+        --radius-sm: 6px; /* inputs/buttons */
+        --focus: 0 0 0 3px rgba(26, 115, 232, 0.18);
+
+        --shadow:
+          0 1px 2px rgba(60, 64, 67, 0.16), 0 1px 3px 1px rgba(60, 64, 67, 0.1);
+      }
+
+      body {
+        background: var(--bg) !important;
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        letter-spacing: 0.1px;
+      }
+
+      /* Layout wrapper */
+      .app-shell {
+        min-height: 100vh;
+        padding: clamp(16px, 3vw, 28px);
+        display: grid;
+        place-items: center;
+      }
+
+      /* Card (no glass, no gradients) */
+      .auth-card {
+        width: min(1040px, 100%);
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: var(--card);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+      }
+
+      /* Left panel: simple, flat */
+      .auth-left {
+        background: #f1f3f4;
+        color: var(--ink);
+        border-right: 1px solid var(--line);
+      }
+
+      /* Kill “chips” glass look */
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.6rem;
+        border-radius: 999px;
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-weight: 600;
+        font-size: 0.85rem;
+      }
+
+      .left-title {
+        font-size: 1.75rem;
+        line-height: 1.2;
+        letter-spacing: -0.2px;
+        margin: 0 0 0.35rem 0;
+      }
+
+      .left-muted {
+        color: var(--muted);
+        margin: 0 0 1rem 0;
+        max-width: 46ch;
+      }
+
+      /* Feature rows: flat, small radius, light borders */
+      .feature {
+        display: grid;
+        grid-template-columns: 36px 1fr;
+        gap: 12px;
+        align-items: start;
+        padding: 12px;
+        border-radius: 10px;
+        background: #fff;
+        border: 1px solid var(--line);
+      }
+
+      .feature-icon {
+        width: 36px;
+        height: 36px;
+        display: grid;
+        place-items: center;
+        border-radius: 10px;
+        background: #f1f3f4;
+        border: 1px solid var(--line);
+        color: var(--muted);
+      }
+
+      .feature-title {
+        font-weight: 600;
+        margin: 0;
+        font-size: 0.95rem;
+        color: var(--ink);
+      }
+
+      .feature-desc {
+        margin: 3px 0 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      /* Right panel */
+      .auth-right {
+        background: var(--card);
+        color: var(--ink);
+      }
+
+      .right-header p {
+        color: var(--muted);
+      }
+
+      .link-clean {
+        color: var(--brand);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .link-clean:hover {
+        text-decoration: underline;
+      }
+
+      /* Labels */
+      .form-label {
+        font-weight: 600;
+        color: var(--ink);
+        margin-bottom: 0.35rem;
+      }
+
+      /* Input group: remove “bootstrap pill” feel */
+      .control .input-group-text {
+        border-radius: var(--radius-sm) 0 0 var(--radius-sm) !important;
+        border: 1px solid var(--line);
+        border-right: 0;
+        background: #f1f3f4;
+        color: var(--muted);
+        padding: 0.65rem 0.75rem;
+      }
+
+      .control .form-control,
+      .control .form-select {
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0 !important;
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--ink);
+        padding: 0.65rem 0.8rem;
+        box-shadow: none !important;
+      }
+
+      /* If input is not in input-group (rare), still look consistent */
+      .form-control:not(.input-group .form-control),
+      .form-select:not(.input-group .form-select) {
+        border-radius: var(--radius-sm) !important;
+        border: 1px solid var(--line);
+      }
+
+      .control .form-control::placeholder {
+        color: #9aa0a6;
+      }
+
+      .control .form-control:focus,
+      .control .form-select:focus {
+        border-color: var(--brand);
+        box-shadow: var(--focus) !important;
+      }
+
+      /* Password toggle button */
+      .control .btn-toggle {
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0 !important;
+        border: 1px solid var(--line);
+        border-left: 0;
+        background: #f1f3f4;
+        color: var(--muted);
+      }
+      .control .btn-toggle:focus {
+        box-shadow: var(--focus) !important;
+      }
+
+      .form-text {
+        color: var(--muted);
+      }
+
+      /* Buttons: Google-ish (no giant shadow, subtle radius) */
+      .btn-primary {
+        --bs-btn-bg: var(--brand);
+        --bs-btn-border-color: var(--brand);
+        --bs-btn-hover-bg: var(--brand-hover);
+        --bs-btn-hover-border-color: var(--brand-hover);
+        --bs-btn-active-bg: var(--brand-hover);
+        --bs-btn-active-border-color: var(--brand-hover);
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        letter-spacing: 0.1px;
+        box-shadow: none;
+      }
+
+      .btn-outline-secondary {
+        --bs-btn-color: var(--ink);
+        --bs-btn-border-color: var(--line);
+        --bs-btn-hover-bg: #f1f3f4;
+        --bs-btn-hover-border-color: var(--line);
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+      }
+
+      /* Checkbox + focus */
+      .form-check-input {
+        border-color: var(--line);
+      }
+      .form-check-input:focus {
+        box-shadow: var(--focus);
+        border-color: var(--brand);
+      }
+
+      /* Alerts: flatter */
+      .alert {
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--line);
+      }
+
+      /* Validation: keep it clean */
+      .was-validated .form-control:invalid,
+      .was-validated .form-select:invalid {
+        border-color: #d93025 !important;
+      }
+      .was-validated .form-control:invalid:focus,
+      .was-validated .form-select:invalid:focus {
+        box-shadow: 0 0 0 3px rgba(217, 48, 37, 0.14) !important;
+      }
+
+      /* Responsive: remove hard divider on mobile */
+      @media (max-width: 991.98px) {
+        .auth-left {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
   </head>
 
-  <body class="bg-light">
-    <main class="min-vh-100 d-flex align-items-center">
-      <div class="container py-5">
-        <div class="row justify-content-center g-4">
-          <div class="col-12 col-lg-10 col-xl-9">
-            <div class="overflow-hidden border-0 shadow-lg card rounded-4">
-              <div class="row g-0">
-                <!-- Brand / Value panel -->
-                <section class="text-white col-lg-5 bg-primary">
-                  <div class="p-4 h-100 p-md-5 d-flex flex-column">
-                    <div
-                      class="mb-4 d-flex align-items-center justify-content-between"
-                    >
-                      <span
-                        class="px-3 py-2 bg-white badge text-primary rounded-pill"
-                      >
-                        <i class="bi bi-stars me-1"></i> NovaCloud
-                      </span>
-                      <span
-                        class="px-3 py-2 bg-white bg-opacity-25 badge rounded-pill"
-                      >
-                        <i class="bi bi-shield-check me-1"></i> Secure
-                      </span>
-                    </div>
+  <body>
+    <a
+      class="top-0 p-2 bg-white visually-hidden-focusable position-absolute start-0 text-dark"
+      href="#signupForm"
+    >
+      Skip to form
+    </a>
 
-                    <h1 class="mb-2 display-6 fw-semibold">
-                      Create your workspace
-                    </h1>
-                    <p class="mb-4 text-white-75">
-                      A conversion-friendly signup built with pure Bootstrap
-                      components.
-                    </p>
+    <main class="app-shell" role="main">
+      <div class="auth-card">
+        <div class="row g-0">
+          <!-- Brand / Value panel -->
+          <section class="auth-left col-lg-5">
+            <div class="p-4 p-md-5 h-100 d-flex flex-column">
+              <div
+                class="mb-4 d-flex align-items-center justify-content-between"
+              >
+                <span class="chip" aria-label="Product name">
+                  <i class="bi bi-stars" aria-hidden="true"></i>
+                  NovaCloud
+                </span>
+                <span class="chip" aria-label="Security status">
+                  <i class="bi bi-shield-check" aria-hidden="true"></i>
+                  Secure
+                </span>
+              </div>
 
-                    <div class="gap-3 d-grid">
-                      <div class="gap-3 d-flex align-items-start">
-                        <div
-                          class="p-2 bg-white bg-opacity-25 rounded-3 d-inline-flex"
-                        >
-                          <i class="bi bi-lightning-charge fs-5"></i>
-                        </div>
-                        <div>
-                          <div class="fw-semibold">Fast onboarding</div>
-                          <div class="text-white-75 small">
-                            Get started in under 2 minutes.
-                          </div>
-                        </div>
-                      </div>
+              <h1 class="mb-2 left-title" id="pageTitle">
+                Create your workspace
+              </h1>
+              <p class="mb-4 left-muted">
+                A minimal, conversion-friendly signup with clean UI and
+                accessible HTML.
+              </p>
 
-                      <div class="gap-3 d-flex align-items-start">
-                        <div
-                          class="p-2 bg-white bg-opacity-25 rounded-3 d-inline-flex"
-                        >
-                          <i class="bi bi-people fs-5"></i>
-                        </div>
-                        <div>
-                          <div class="fw-semibold">Team-ready</div>
-                          <div class="text-white-75 small">
-                            Invite teammates and assign roles.
-                          </div>
-                        </div>
-                      </div>
-
-                      <div class="gap-3 d-flex align-items-start">
-                        <div
-                          class="p-2 bg-white bg-opacity-25 rounded-3 d-inline-flex"
-                        >
-                          <i class="bi bi-graph-up-arrow fs-5"></i>
-                        </div>
-                        <div>
-                          <div class="fw-semibold">Built to scale</div>
-                          <div class="text-white-75 small">
-                            Upgrade anytime—no lock-in.
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="pt-4 mt-auto">
-                      <div class="flex-wrap gap-2 d-flex">
-                        <span
-                          class="px-3 py-2 bg-white bg-opacity-25 badge rounded-pill"
-                        >
-                          <i class="bi bi-check2-circle me-1"></i> No credit
-                          card
-                        </span>
-                        <span
-                          class="px-3 py-2 bg-white bg-opacity-25 badge rounded-pill"
-                        >
-                          <i class="bi bi-clock-history me-1"></i> 14-day trial
-                        </span>
-                        <span
-                          class="px-3 py-2 bg-white bg-opacity-25 badge rounded-pill"
-                        >
-                          <i class="bi bi-lock me-1"></i> Privacy-first
-                        </span>
-                      </div>
-                    </div>
+              <div class="gap-3 d-grid" role="list" aria-label="Key benefits">
+                <div class="feature" role="listitem">
+                  <div class="feature-icon" aria-hidden="true">
+                    <i class="bi bi-lightning-charge fs-5"></i>
                   </div>
-                </section>
+                  <div>
+                    <p class="feature-title">Fast onboarding</p>
+                    <p class="feature-desc">Get started in under 2 minutes.</p>
+                  </div>
+                </div>
 
-                <!-- Form panel -->
-                <section class="col-lg-7">
-                  <div class="p-4 p-md-5">
-                    <div
-                      class="mb-3 d-flex align-items-start justify-content-between"
-                    >
-                      <div>
-                        <h2 class="mb-1 h4 fw-semibold">Create account</h2>
-                        <p class="mb-0 text-muted">
-                          Start your 14-day free trial.
-                        </p>
-                      </div>
-                      <div class="text-end">
-                        <div class="small text-muted">
-                          Already have an account?
-                        </div>
-                        <a
-                          href="#"
-                          class="link-primary fw-semibold text-decoration-none"
-                        >
-                          Sign in <i class="bi bi-arrow-right"></i>
-                        </a>
-                      </div>
-                    </div>
-
-                    <!-- Alerts will be injected here -->
-                    <div id="alertContainer" class="mb-3"></div>
-
-                    <!-- Social buttons -->
-                    <div class="mb-3 row g-2">
-                      <div class="col-12 col-md-6">
-                        <button
-                          type="button"
-                          class="btn btn-outline-secondary w-100"
-                        >
-                          <i class="bi bi-google me-2"></i> Continue with Google
-                        </button>
-                      </div>
-                      <div class="col-12 col-md-6">
-                        <button
-                          type="button"
-                          class="btn btn-outline-secondary w-100"
-                        >
-                          <i class="bi bi-microsoft me-2"></i> Continue with
-                          Microsoft
-                        </button>
-                      </div>
-                    </div>
-
-                    <div class="my-3 d-flex align-items-center">
-                      <hr class="flex-grow-1" />
-                      <span class="px-3 text-muted small"
-                        >or sign up with email</span
-                      >
-                      <hr class="flex-grow-1" />
-                    </div>
-
-                    <form id="signupForm" class="needs-validation" novalidate>
-                      <div class="row g-3">
-                        <div class="col-sm-6">
-                          <label class="form-label">First name</label>
-                          <div class="input-group">
-                            <span class="input-group-text"
-                              ><i class="bi bi-person"></i
-                            ></span>
-                            <input
-                              name="firstName"
-                              type="text"
-                              class="form-control"
-                              placeholder="Jane"
-                              required
-                            />
-                            <div class="invalid-feedback">
-                              Please enter your first name.
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="col-sm-6">
-                          <label class="form-label">Last name</label>
-                          <div class="input-group">
-                            <span class="input-group-text"
-                              ><i class="bi bi-person"></i
-                            ></span>
-                            <input
-                              name="lastName"
-                              type="text"
-                              class="form-control"
-                              placeholder="Doe"
-                              required
-                            />
-                            <div class="invalid-feedback">
-                              Please enter your last name.
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="col-12">
-                          <label class="form-label">Work email</label>
-                          <div class="input-group">
-                            <span class="input-group-text"
-                              ><i class="bi bi-envelope"></i
-                            ></span>
-                            <input
-                              name="email"
-                              type="email"
-                              class="form-control"
-                              placeholder="jane@company.com"
-                              required
-                            />
-                            <div class="invalid-feedback">
-                              Please provide a valid email address.
-                            </div>
-                          </div>
-                          <div class="form-text">
-                            Use your work email for faster setup.
-                          </div>
-                        </div>
-
-                        <div class="col-12">
-                          <label class="form-label">Company name</label>
-                          <div class="input-group">
-                            <span class="input-group-text"
-                              ><i class="bi bi-building"></i
-                            ></span>
-                            <input
-                              name="company"
-                              type="text"
-                              class="form-control"
-                              placeholder="Acme Inc."
-                              required
-                            />
-                            <div class="invalid-feedback">
-                              Please enter your company name.
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="col-md-6">
-                          <label class="form-label">Role</label>
-                          <div class="input-group">
-                            <span class="input-group-text"
-                              ><i class="bi bi-briefcase"></i
-                            ></span>
-                            <select name="role" class="form-select" required>
-                              <option value="" selected disabled>
-                                Choose a role…
-                              </option>
-                              <option>Founder</option>
-                              <option>Engineering</option>
-                              <option>Design</option>
-                              <option>Product</option>
-                              <option>Sales</option>
-                              <option>Operations</option>
-                            </select>
-                            <div class="invalid-feedback">
-                              Please select a role.
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="col-md-6">
-                          <label class="form-label">Team size</label>
-                          <div class="input-group">
-                            <span class="input-group-text"
-                              ><i class="bi bi-people"></i
-                            ></span>
-                            <select
-                              name="teamSize"
-                              class="form-select"
-                              required
-                            >
-                              <option value="" selected disabled>
-                                Select…
-                              </option>
-                              <option>Just me</option>
-                              <option>2–5</option>
-                              <option>6–20</option>
-                              <option>21–100</option>
-                              <option>100+</option>
-                            </select>
-                            <div class="invalid-feedback">
-                              Please select a team size.
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="col-12">
-                          <label class="form-label">Password</label>
-                          <div class="input-group">
-                            <span class="input-group-text"
-                              ><i class="bi bi-key"></i
-                            ></span>
-                            <input
-                              id="password"
-                              name="password"
-                              type="password"
-                              class="form-control"
-                              minlength="8"
-                              placeholder="At least 8 characters"
-                              required
-                            />
-                            <button
-                              class="btn btn-outline-secondary"
-                              type="button"
-                              id="togglePwd"
-                              aria-label="Toggle password"
-                            >
-                              <i id="eyeIcon" class="bi bi-eye"></i>
-                            </button>
-                            <div class="invalid-feedback">
-                              Password must be at least 8 characters.
-                            </div>
-                          </div>
-                          <div class="form-text">
-                            Tip: add numbers and symbols for a stronger
-                            password.
-                          </div>
-                        </div>
-
-                        <div class="col-12">
-                          <div class="form-check">
-                            <input
-                              class="form-check-input"
-                              type="checkbox"
-                              value="yes"
-                              id="terms"
-                              required
-                            />
-                            <label class="form-check-label" for="terms">
-                              I agree to the
-                              <a href="#" class="link-primary">Terms</a> and
-                              <a href="#" class="link-primary">Privacy Policy</a
-                              >.
-                            </label>
-                            <div class="invalid-feedback">
-                              You must agree before continuing.
-                            </div>
-                          </div>
-                        </div>
-
-                        <div class="gap-2 mt-2 col-12 d-grid">
-                          <button
-                            id="submitBtn"
-                            class="btn btn-primary btn-lg"
-                            type="submit"
-                          >
-                            <i class="bi bi-rocket-takeoff me-2"></i> Create
-                            account
-                          </button>
-                          <button
-                            class="btn btn-outline-secondary"
-                            type="reset"
-                          >
-                            <i class="bi bi-arrow-counterclockwise me-2"></i>
-                            Reset
-                          </button>
-                        </div>
-
-                        <p class="mt-2 mb-0 text-muted small">
-                          By continuing, you acknowledge our data processing
-                          practices.
-                        </p>
-                      </div>
-                    </form>
-
-                    <p class="mt-3 mb-0 text-muted small">
-                      Demo behavior: no redirects, random success/error alert +
-                      console logs.
+                <div class="feature" role="listitem">
+                  <div class="feature-icon" aria-hidden="true">
+                    <i class="bi bi-people fs-5"></i>
+                  </div>
+                  <div>
+                    <p class="feature-title">Team-ready</p>
+                    <p class="feature-desc">
+                      Invite teammates and assign roles.
                     </p>
                   </div>
-                </section>
+                </div>
+
+                <div class="feature" role="listitem">
+                  <div class="feature-icon" aria-hidden="true">
+                    <i class="bi bi-graph-up-arrow fs-5"></i>
+                  </div>
+                  <div>
+                    <p class="feature-title">Built to scale</p>
+                    <p class="feature-desc">Upgrade anytime—no lock-in.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-4 mt-auto">
+                <div class="flex-wrap gap-2 d-flex" aria-label="Highlights">
+                  <span class="chip">
+                    <i class="bi bi-check2-circle" aria-hidden="true"></i> No
+                    credit card
+                  </span>
+                  <span class="chip">
+                    <i class="bi bi-clock-history" aria-hidden="true"></i>
+                    14-day trial
+                  </span>
+                  <span class="chip">
+                    <i class="bi bi-lock" aria-hidden="true"></i> Privacy-first
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          </section>
+
+          <!-- Form panel -->
+          <section class="auth-right col-lg-7" aria-labelledby="formTitle">
+            <div class="p-4 p-md-5">
+              <header
+                class="gap-3 mb-3 right-header d-flex align-items-start justify-content-between"
+              >
+                <div>
+                  <h2 class="h4 fw-semibold" id="formTitle">Create account</h2>
+                  <p>Start your 14-day free trial.</p>
+                </div>
+                <div class="text-end">
+                  <div class="small" style="color: rgba(13, 20, 36, 0.62)">
+                    Already have an account?
+                  </div>
+                  <a href="#" class="link-clean">
+                    Sign in <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                  </a>
+                </div>
+              </header>
+
+              <!-- Alerts (live region) -->
+              <div
+                id="alertContainer"
+                class="mb-3"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              ></div>
+
+              <form
+                id="signupForm"
+                class="needs-validation"
+                novalidate
+                aria-describedby="formNote"
+              >
+                <div class="row g-3">
+                  <div class="col-sm-6">
+                    <label class="form-label" for="firstName">First name</label>
+                    <div class="control input-group">
+                      <span class="input-group-text" aria-hidden="true">
+                        <i class="bi bi-person"></i>
+                      </span>
+                      <input
+                        id="firstName"
+                        name="firstName"
+                        type="text"
+                        class="form-control"
+                        placeholder="Jane"
+                        autocomplete="given-name"
+                        required
+                      />
+                      <div class="invalid-feedback" id="firstNameError">
+                        Please enter your first name.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-sm-6">
+                    <label class="form-label" for="lastName">Last name</label>
+                    <div class="control input-group">
+                      <span class="input-group-text" aria-hidden="true">
+                        <i class="bi bi-person"></i>
+                      </span>
+                      <input
+                        id="lastName"
+                        name="lastName"
+                        type="text"
+                        class="form-control"
+                        placeholder="Doe"
+                        autocomplete="family-name"
+                        required
+                      />
+                      <div class="invalid-feedback" id="lastNameError">
+                        Please enter your last name.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-12">
+                    <label class="form-label" for="email">Work email</label>
+                    <div class="control input-group">
+                      <span class="input-group-text" aria-hidden="true">
+                        <i class="bi bi-envelope"></i>
+                      </span>
+                      <input
+                        id="email"
+                        name="email"
+                        type="email"
+                        class="form-control"
+                        placeholder="jane@company.com"
+                        autocomplete="email"
+                        inputmode="email"
+                        aria-describedby="emailHelp"
+                        required
+                      />
+                      <div class="invalid-feedback" id="emailError">
+                        Please provide a valid email address.
+                      </div>
+                    </div>
+                    <div class="form-text" id="emailHelp">
+                      Use your work email for faster setup.
+                    </div>
+                  </div>
+
+                  <div class="col-12">
+                    <label class="form-label" for="company">Company name</label>
+                    <div class="control input-group">
+                      <span class="input-group-text" aria-hidden="true">
+                        <i class="bi bi-building"></i>
+                      </span>
+                      <input
+                        id="company"
+                        name="company"
+                        type="text"
+                        class="form-control"
+                        placeholder="Acme Inc."
+                        autocomplete="organization"
+                        required
+                      />
+                      <div class="invalid-feedback" id="companyError">
+                        Please enter your company name.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label" for="role">Role</label>
+                    <div class="control input-group">
+                      <span class="input-group-text" aria-hidden="true">
+                        <i class="bi bi-briefcase"></i>
+                      </span>
+                      <select
+                        id="role"
+                        name="role"
+                        class="form-select"
+                        required
+                      >
+                        <option value="" selected disabled>
+                          Choose a role…
+                        </option>
+                        <option>Founder</option>
+                        <option>Engineering</option>
+                        <option>Design</option>
+                        <option>Product</option>
+                        <option>Sales</option>
+                        <option>Operations</option>
+                      </select>
+                      <div class="invalid-feedback" id="roleError">
+                        Please select a role.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label" for="teamSize">Team size</label>
+                    <div class="control input-group">
+                      <span class="input-group-text" aria-hidden="true">
+                        <i class="bi bi-people"></i>
+                      </span>
+                      <select
+                        id="teamSize"
+                        name="teamSize"
+                        class="form-select"
+                        required
+                      >
+                        <option value="" selected disabled>Select…</option>
+                        <option>Just me</option>
+                        <option>2–5</option>
+                        <option>6–20</option>
+                        <option>21–100</option>
+                        <option>100+</option>
+                      </select>
+                      <div class="invalid-feedback" id="teamSizeError">
+                        Please select a team size.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-12">
+                    <label class="form-label" for="password">Password</label>
+                    <div class="control input-group">
+                      <span class="input-group-text" aria-hidden="true">
+                        <i class="bi bi-key"></i>
+                      </span>
+                      <input
+                        id="password"
+                        name="password"
+                        type="password"
+                        class="form-control"
+                        minlength="8"
+                        placeholder="At least 8 characters"
+                        autocomplete="new-password"
+                        aria-describedby="passwordHelp"
+                        required
+                      />
+                      <button
+                        class="btn btn-toggle"
+                        type="button"
+                        id="togglePwd"
+                        aria-label="Show password"
+                        aria-pressed="false"
+                        aria-controls="password"
+                      >
+                        <i
+                          id="eyeIcon"
+                          class="bi bi-eye"
+                          aria-hidden="true"
+                        ></i>
+                      </button>
+                      <div class="invalid-feedback" id="passwordError">
+                        Password must be at least 8 characters.
+                      </div>
+                    </div>
+                    <div class="form-text" id="passwordHelp">
+                      Tip: add numbers and symbols for a stronger password.
+                    </div>
+                  </div>
+
+                  <div class="col-12">
+                    <div class="form-check">
+                      <input
+                        class="form-check-input"
+                        type="checkbox"
+                        value="yes"
+                        id="terms"
+                        required
+                        aria-describedby="termsHelp"
+                      />
+                      <label class="form-check-label" for="terms">
+                        I agree to the
+                        <a href="#" class="link-clean">Terms</a> and
+                        <a href="#" class="link-clean">Privacy Policy</a>.
+                      </label>
+                      <div class="invalid-feedback" id="termsError">
+                        You must agree before continuing.
+                      </div>
+                      <div class="form-text" id="termsHelp">
+                        You can cancel anytime during the trial.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="gap-2 mt-2 col-12 d-grid">
+                    <button
+                      id="submitBtn"
+                      class="btn btn-primary btn-lg"
+                      type="submit"
+                    >
+                      <i
+                        class="bi bi-rocket-takeoff me-2"
+                        aria-hidden="true"
+                      ></i>
+                      Create account
+                    </button>
+                    <button class="btn btn-outline-secondary" type="reset">
+                      <i
+                        class="bi bi-arrow-counterclockwise me-2"
+                        aria-hidden="true"
+                      ></i>
+                      Reset
+                    </button>
+                  </div>
+
+                  <p
+                    class="mt-2 mb-0 small"
+                    id="formNote"
+                    style="color: rgba(13, 20, 36, 0.62)"
+                  >
+                    By continuing, you acknowledge our data processing
+                    practices.
+                  </p>
+                </div>
+              </form>
+
+              <p class="mt-3 mb-0 text-muted small">
+                Demo behavior: no redirects, random success/error alert +
+                console logs.
+              </p>
+            </div>
+          </section>
         </div>
       </div>
     </main>
@@ -414,48 +665,43 @@
       function showAlert(type, title, message) {
         const icon =
           type === "success"
-            ? '<i class="bi bi-check-circle-fill me-2"></i>'
-            : '<i class="bi bi-exclamation-triangle-fill me-2"></i>';
+            ? '<i class="bi bi-check-circle-fill me-2" aria-hidden="true"></i>'
+            : '<i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i>';
+
+        // Use role=alert for errors, status for success (polite)
+        const role = type === "danger" ? "alert" : "status";
+        const live = type === "danger" ? "assertive" : "polite";
 
         alertContainer.innerHTML = `
-        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-          ${icon}
-          <strong>${title}</strong> ${message}
-          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-      `;
+          <div class="alert alert-${type} alert-dismissible fade show" role="${role}" aria-live="${live}" aria-atomic="true">
+            ${icon}
+            <strong>${title}</strong> ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close alert"></button>
+          </div>
+        `;
       }
 
       form.addEventListener("submit", (event) => {
-        // Never redirect
         event.preventDefault();
         event.stopPropagation();
 
-        // Clear previous alert
         alertContainer.innerHTML = "";
 
-        // Native + Bootstrap validation
         if (!form.checkValidity()) {
           form.classList.add("was-validated");
           console.warn("[Signup] Validation failed: form is not valid.");
-          console.warn("[Signup] Details:", {
-            firstName: form.elements.firstName?.value,
-            lastName: form.elements.lastName?.value,
-            email: form.elements.email?.value,
-            company: form.elements.company?.value,
-            role: form.elements.role?.value,
-            teamSize: form.elements.teamSize?.value,
-            termsAccepted: document.getElementById("terms").checked,
-          });
           showAlert(
             "danger",
             "Check your inputs.",
             "Please fix the highlighted fields and try again.",
           );
+
+          // Move focus to first invalid field for accessibility
+          const firstInvalid = form.querySelector(":invalid");
+          if (firstInvalid) firstInvalid.focus();
           return;
         }
 
-        // Collect form payload for logs
         const payload = {
           firstName: form.elements.firstName.value.trim(),
           lastName: form.elements.lastName.value.trim(),
@@ -468,15 +714,14 @@
           timestamp: new Date().toISOString(),
         };
 
-        // Simulate "processing" state (no CSS, just Bootstrap utilities)
         submitBtn.disabled = true;
         const originalBtnHTML = submitBtn.innerHTML;
+        submitBtn.setAttribute("aria-busy", "true");
         submitBtn.innerHTML = `
-        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-        Creating…
-      `;
+          <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+          Creating…
+        `;
 
-        // Simulated network delay
         setTimeout(() => {
           const isSuccess = Math.random() > 0.5;
 
@@ -496,16 +741,15 @@
             showAlert("danger", "Signup failed.", reason);
           }
 
-          // Restore button
           submitBtn.disabled = false;
+          submitBtn.removeAttribute("aria-busy");
           submitBtn.innerHTML = originalBtnHTML;
 
-          // Scroll alert into view (helpful on mobile)
           alertContainer.scrollIntoView({ behavior: "smooth", block: "start" });
         }, 650);
       });
 
-      // Toggle password visibility
+      // Toggle password visibility (ARIA improved)
       const pwd = document.getElementById("password");
       const toggle = document.getElementById("togglePwd");
       const eye = document.getElementById("eyeIcon");
@@ -514,6 +758,12 @@
         const hidden = pwd.type === "password";
         pwd.type = hidden ? "text" : "password";
         eye.className = hidden ? "bi bi-eye-slash" : "bi bi-eye";
+
+        toggle.setAttribute("aria-pressed", String(hidden));
+        toggle.setAttribute(
+          "aria-label",
+          hidden ? "Hide password" : "Show password",
+        );
       });
     </script>
   </body>

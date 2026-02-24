@@ -236,9 +236,33 @@ export const SettingsView: React.FC<SettingsViewProps> = (settingsProps) => {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div className="md:col-span-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <label className="text-sm font-medium text-text-secondary">
+                      {t("settings.aiModel")}
+                    </label>
+                    <div className="relative group">
+                      <button
+                        type="button"
+                        aria-label={t("settings.aiModel.recommended.aria")}
+                        className="inline-flex items-center justify-center w-5 h-5 transition-colors border rounded-full text-text-muted border-border-default/60 bg-bg-main/60 hover:text-accent-primary hover:border-accent-primary/40 focus:outline-none focus:ring-2 focus:ring-accent-primary/40"
+                      >
+                        <HelpCircle className="w-3.5 h-3.5" />
+                      </button>
+                      <div className="absolute z-30 w-[min(20rem,calc(100vw-3rem))] p-3 text-xs transition-all duration-200 border rounded-xl shadow-xl pointer-events-none opacity-0 left-0 top-[calc(100%+10px)] translate-y-1 bg-bg-card/95 backdrop-blur-md border-border-default/70 text-text-secondary group-hover:opacity-100 group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0">
+                        <p className="mb-2 text-[11px] font-semibold tracking-wide uppercase text-accent-primary/90">
+                          {t("settings.aiModel.recommended.title")}
+                        </p>
+                        <ul className="space-y-1.5 leading-relaxed break-words">
+                          <li>{t("settings.aiModel.recommended.auto")}</li>
+                          <li>{t("settings.aiModel.recommended.free")}</li>
+                          <li>{t("settings.aiModel.recommended.stable1")}</li>
+                          <li>{t("settings.aiModel.recommended.stable2")}</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                   <Input
-                    label={t("settings.aiModel")}
-                    value={settings.aiModel || "anthropic/claude-3-5-sonnet"}
+                    value={settings.aiModel ?? ""}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       updateSetting("aiModel", e.target.value)
                     }

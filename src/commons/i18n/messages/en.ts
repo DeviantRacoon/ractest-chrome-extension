@@ -39,6 +39,17 @@ const en = {
   "settings.aiModel": "AI Model",
   "settings.aiModel.placeholder": "e.g: anthropic/claude-3-5-sonnet",
   "settings.aiModel.helper": "Model ID (e.g: google/gemini-2.0-flash-exp:free)",
+  "settings.aiModel.recommended.aria":
+    "View recommended models for this project",
+  "settings.aiModel.recommended.title": "Recommended models",
+  "settings.aiModel.recommended.auto":
+    "openrouter/auto: recommended for general testing with smart routing.",
+  "settings.aiModel.recommended.free":
+    "openrouter/free: useful for high-volume low-cost test runs.",
+  "settings.aiModel.recommended.stable1":
+    "openai/gpt-5.1: stable baseline for result comparisons.",
+  "settings.aiModel.recommended.stable2":
+    "anthropic/claude-sonnet-4.5: strong alternative for quality A/B checks.",
 
   "settings.aiMaxTokens": "Max Tokens",
   "settings.aiMaxTokens.helper": "Response limit",
@@ -73,6 +84,29 @@ const en = {
   "settings.confirmReset.cancel": "Cancel",
 
   "settings.about.title": "About RacTest",
+  "fakeData.option.name": "Full Name",
+  "fakeData.option.firstName": "First Name",
+  "fakeData.option.lastName": "Last Name",
+  "fakeData.option.email": "Email",
+  "fakeData.option.username": "Username",
+  "fakeData.option.password": "Password",
+  "fakeData.option.phone": "Phone",
+  "fakeData.option.address": "Address",
+  "fakeData.option.city": "City",
+  "fakeData.option.state": "State/Province",
+  "fakeData.option.zipCode": "Zip Code",
+  "fakeData.option.country": "Country",
+  "fakeData.option.company": "Company",
+  "fakeData.option.jobTitle": "Job Title",
+  "fakeData.option.url": "URL",
+  "fakeData.option.date": "Date",
+  "fakeData.option.time": "Time",
+  "fakeData.option.datetime": "Date & Time",
+  "fakeData.option.number": "Number",
+  "fakeData.option.price": "Price",
+  "fakeData.option.uuid": "UUID",
+  "fakeData.option.color": "Hex Color",
+  "fakeData.option.lorem": "Lorem Ipsum Text",
 
   "about.version": "Version {{version}}",
   "about.section.about": "About RacTest",
@@ -177,6 +211,20 @@ const en = {
   "history.details.id": "ID: {{id}}...",
   "history.details.noSteps": "No steps recorded",
   "history.details.noLogs": "No console logs recorded",
+  "history.details.telemetry.title": "Autopilot Telemetry",
+  "history.details.telemetry.subtitle":
+    "Performance and stability diagnostics for this run.",
+  "history.details.telemetry.notAvailable":
+    "Telemetry is not available for this execution.",
+  "history.details.telemetry.cycles": "Cycles",
+  "history.details.telemetry.avgCycle": "Avg cycle",
+  "history.details.telemetry.replans": "Replans",
+  "history.details.telemetry.llmPlanMs": "LLM planning",
+  "history.details.telemetry.observeMs": "Observe total",
+  "history.details.telemetry.actMs": "Act total",
+  "history.details.telemetry.replanReasons": "Replan reasons",
+  "history.details.telemetry.noReplanReasons":
+    "No replan reasons captured",
 
   "profile.new": "New flow",
   "profile.edit": "Edit flow",
@@ -208,6 +256,49 @@ const en = {
   "stepEditor.aiMagic": "AI Magic",
   "stepEditor.aiNeedApiKey": "Set your API Key to use AI Magic",
   "stepEditor.aiGenerate": "Generate steps with AI",
+  "stepEditor.action.CLICK": "Click",
+  "stepEditor.action.TYPE": "Type",
+  "stepEditor.action.SELECT": "Select",
+  "stepEditor.action.CHECK": "Check",
+  "stepEditor.action.UNCHECK": "Uncheck",
+  "stepEditor.stepCard.highlight": "Highlight on page",
+  "stepEditor.stepCard.delete": "Delete step",
+  "stepEditor.stepCard.actionType": "Action Type",
+  "stepEditor.stepCard.selector": "Selector",
+  "stepEditor.stepCard.valueText": "Value (text)",
+  "stepEditor.stepCard.valueOption": "Value (option)",
+  "stepEditor.stepCard.valuePlaceholderText": "e.g: user@example.com",
+  "stepEditor.stepCard.valuePlaceholderOption": "e.g: value-1",
+  "stepEditor.stepCard.uniqueText": "Unique text (append UUID)",
+  "stepEditor.stepCard.useFakeData": "Use Random Data (Fake Data)",
+  "stepEditor.stepCard.fakeDataType": "Data Type",
+  "stepEditor.stepCard.delay": "Delay (ms)",
+  "stepEditor.divider.placeholder": "Section Name",
+  "stepEditor.divider.delete": "Delete section",
+  "stepEditor.aiModal.title": "Generate with AI",
+  "stepEditor.aiModal.close": "Close modal",
+  "stepEditor.aiModal.loading.title": "Analyzing the website...",
+  "stepEditor.aiModal.loading.body":
+    "We are distilling the HTML and generating the steps.",
+  "stepEditor.aiModal.promptLabel": "What do you want to test?",
+  "stepEditor.aiModal.promptPlaceholder":
+    "E.g: Fill the registration form with valid data...",
+  "stepEditor.aiModal.readingModeLabel": "Reading Mode:",
+  "stepEditor.aiModal.readingMode.fast.title": "Fast: Interactive elements only",
+  "stepEditor.aiModal.readingMode.normal.title": "Normal: Smart context",
+  "stepEditor.aiModal.readingMode.complex.title": "Complex: Full scan",
+  "stepEditor.aiModal.readingMode.fast.description":
+    "Fast: detects only buttons, links, and basic inputs. Ideal for speed on simple sites.",
+  "stepEditor.aiModal.readingMode.normal.description":
+    "Normal: adds smart context and labels. The best balance for most tasks.",
+  "stepEditor.aiModal.readingMode.complex.description":
+    "Complex: deep scan of the full DOM. Use it if elements are not detected in complex apps (React/Angular).",
+  "stepEditor.aiModal.tip.fast":
+    "AI will analyze the current screen to generate steps.",
+  "stepEditor.aiModal.tip.normalComplex":
+    "AI will analyze the current screen and its context to generate steps.",
+  "stepEditor.aiModal.cancel": "Cancel",
+  "stepEditor.aiModal.generate": "Generate Steps",
   "stepEditor.emptyTitle": "No configured steps",
   "stepEditor.emptyBody":
     'Use the "Capture Step" button to select page elements and create your test flow.',
