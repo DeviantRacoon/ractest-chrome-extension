@@ -14,9 +14,14 @@ export class OpenRouterAdapter implements ILLMProvider {
   ): Promise<TestStep[]> {
     const fullPlanMode = goal.includes("[FULL_PLAN]");
     const fillFirstMode = goal.includes("[FORM_FILL_FIRST]");
+    const chunkMatch = goal.match(/\[PLAN_CHUNK_MAX=(\d{1,2})\]/i);
+    const planningLimit = chunkMatch
+      ? Math.max(1, Math.min(20, Number(chunkMatch[1])))
+      : 20;
 
     // Format history
     const history = previousSteps
+      .slice(-10)
       .map(
         (s, i) =>
           `${i + 1}. [${s.action}] ${s.selector} (ID: ${s.targetId}) value: ${s.value || "N/A"}`,
@@ -66,7 +71,7 @@ export class OpenRouterAdapter implements ILLMProvider {
       Hard rules:
       - Output JSON only, no prose.
       - In non-planning mode: output exactly one step.
-      - In planning mode: output up to 20 ordered steps.
+      - In planning mode: output up to ${planningLimit} ordered steps.
       - Use targetId from provided [ID]. Never invent IDs.
       - Use FINISH only when goal is achieved OR failed conclusively.
       - Do not repeat same action+targetId when last outcome was no_effect.
@@ -74,6 +79,11 @@ export class OpenRouterAdapter implements ILLMProvider {
       - If visible errors/invalid state are present, prioritize ASSERT or FINISH.
       - For TYPE/SELECT actions, provide "value" unless useFakeData=true.
       - Keep focus on the immediate next executable step.
+      - Use Runtime Context key "submit_state" as execution authority:
+        - submit_state=filling: never FINISH, avoid submit/create/save clicks.
+        - submit_state=ready_to_commit: prioritize one commit click.
+        - submit_state=commit_in_flight: avoid repeated commit clicks.
+        - submit_state=committed or verified: prefer FINISH unless explicit error evidence exists.
       - If goal includes [FORM_FILL_FIRST]:
         - Prioritize completing all likely form controls first (TYPE/SELECT/CHECK).
         - Avoid submit/confirm/save clicks until fields are populated.

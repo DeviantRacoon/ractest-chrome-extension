@@ -1,4 +1,5 @@
 import React from "react";
+import { useI18n } from "../i18n";
 import type { FakeDataType } from "../types";
 import { Select } from "./ui/Select";
 
@@ -13,30 +14,31 @@ export const FakeDataSelector: React.FC<FakeDataSelectorProps> = ({
   onChange,
   disabled,
 }) => {
+  const { t } = useI18n();
   const options = [
-    { value: "name", label: "Nombre Completo" },
-    { value: "firstName", label: "Nombre" },
-    { value: "lastName", label: "Apellido" },
-    { value: "email", label: "Email" },
-    { value: "username", label: "Usuario" },
-    { value: "password", label: "Password" },
-    { value: "phone", label: "Teléfono" },
-    { value: "address", label: "Dirección" },
-    { value: "city", label: "Ciudad" },
-    { value: "state", label: "Estado/Provincia" },
-    { value: "zipCode", label: "Código Postal" },
-    { value: "country", label: "País" },
-    { value: "company", label: "Empresa" },
-    { value: "jobTitle", label: "Cargo" },
-    { value: "url", label: "URL" },
-    { value: "date", label: "Fecha" },
-    { value: "time", label: "Hora" },
-    { value: "datetime", label: "Fecha y Hora" },
-    { value: "number", label: "Número" },
-    { value: "price", label: "Precio" },
-    { value: "uuid", label: "UUID" },
-    { value: "color", label: "Color Hex" },
-    { value: "lorem", label: "Texto Lorem Ipsum" },
+    { value: "name", label: t("fakeData.option.name") },
+    { value: "firstName", label: t("fakeData.option.firstName") },
+    { value: "lastName", label: t("fakeData.option.lastName") },
+    { value: "email", label: t("fakeData.option.email") },
+    { value: "username", label: t("fakeData.option.username") },
+    { value: "password", label: t("fakeData.option.password") },
+    { value: "phone", label: t("fakeData.option.phone") },
+    { value: "address", label: t("fakeData.option.address") },
+    { value: "city", label: t("fakeData.option.city") },
+    { value: "state", label: t("fakeData.option.state") },
+    { value: "zipCode", label: t("fakeData.option.zipCode") },
+    { value: "country", label: t("fakeData.option.country") },
+    { value: "company", label: t("fakeData.option.company") },
+    { value: "jobTitle", label: t("fakeData.option.jobTitle") },
+    { value: "url", label: t("fakeData.option.url") },
+    { value: "date", label: t("fakeData.option.date") },
+    { value: "time", label: t("fakeData.option.time") },
+    { value: "datetime", label: t("fakeData.option.datetime") },
+    { value: "number", label: t("fakeData.option.number") },
+    { value: "price", label: t("fakeData.option.price") },
+    { value: "uuid", label: t("fakeData.option.uuid") },
+    { value: "color", label: t("fakeData.option.color") },
+    { value: "lorem", label: t("fakeData.option.lorem") },
   ];
 
   return (

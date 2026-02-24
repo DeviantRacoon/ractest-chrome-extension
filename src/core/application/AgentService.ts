@@ -5,8 +5,28 @@ import type {
   IInspector,
   ILLMProvider,
 } from "../domain/interfaces";
-import type { ConsoleLogEntry, FakeDataType, TestStep } from "../../commons/types";
+import type {
+  AutopilotCycleTelemetry,
+  AutopilotTelemetry,
+  ConsoleLogEntry,
+  FakeDataType,
+  TestStep,
+} from "../../commons/types";
 import { ReportGenerator } from "./ReportGenerator";
+
+interface TelemetryLLMCounters {
+  visualCalls: number;
+  visualMs: number;
+  outcomeCalls: number;
+  outcomeMs: number;
+}
+
+type SubmitLifecycleState =
+  | "filling"
+  | "ready_to_commit"
+  | "commit_in_flight"
+  | "committed"
+  | "verified";
 
 export class AgentService implements IAgent {
   private _isRunning = false;
@@ -45,6 +65,22 @@ export class AgentService implements IAgent {
     }
   }
 
+  private nowMs(): number {
+    return typeof performance !== "undefined" ? performance.now() : Date.now();
+  }
+
+  private elapsedMs(startMs: number): number {
+    return this.roundMs(this.nowMs() - startMs);
+  }
+
+  private roundMs(value: number): number {
+    return Math.max(0, Math.round(value));
+  }
+
+  private incrementCounter(counter: Map<string, number>, key: string) {
+    counter.set(key, (counter.get(key) || 0) + 1);
+  }
+
   public stop() {
     this.stopRequested = true;
     this._isRunning = false; // Immediately flag
@@ -74,6 +110,23 @@ export class AgentService implements IAgent {
     const knownVisualErrors = new Set<string>();
     let lastExecutedWasCriticalCommit = false;
     const capturedConsoleLogs: ConsoleLogEntry[] = [];
+    const forcedCommitStepIds = new Set<string>();
+    const checkboxStateByTargetId = new Map<number, boolean>();
+    const checkboxStateTimestampByTargetId = new Map<number, number>();
+    let lastForcedCommitTargetId: number | null = null;
+    const CHECKBOX_ANTI_FLIP_WINDOW_MS = 5000;
+    const RUN_MEMORY_TTL_MS = 10 * 60 * 1000;
+    const runMemory: {
+      expiresAt: number;
+      lastTouchedAt: number;
+      submitState: SubmitLifecycleState;
+      lastCommitTargetId: number | null;
+    } = {
+      expiresAt: Date.now() + RUN_MEMORY_TTL_MS,
+      lastTouchedAt: Date.now(),
+      submitState: "filling",
+      lastCommitTargetId: null,
+    };
 
     // Subscribe to passive monitoring
     // Note: We need to handle cleanup of this subscription if possible,
@@ -141,8 +194,9 @@ export class AgentService implements IAgent {
     // Fetch configuration (Autopilot now uses a single adaptive pipeline)
     const { storageService } = await import("../../commons/lib/storage");
     const settings = await storageService.getSettings();
-    const AI_AVAILABLE =
-      settings.enableAiForTesting !== false && !!settings.openRouterApiKey;
+    const AI_AVAILABLE = !!settings.openRouterApiKey;
+    const AGENT_MODE: "strict_fail_fast" | "balanced" =
+      settings.agentMode === "balanced" ? "balanced" : "strict_fail_fast";
     const MAX_STEPS = settings.agentMaxSteps || 20;
     const MAX_RETRIES_NON_CRITICAL =
       settings.maxRetriesNonCritical !== undefined
@@ -154,10 +208,15 @@ export class AgentService implements IAgent {
     const EFFECTIVE_STEP_DELAY = Math.min(Math.max(STEP_DELAY, 0), 300);
     const STABILITY_TIMEOUT = Math.min(Math.max(STEP_DELAY, 700), 1500);
     const retryByStepKey = new Map<string, number>();
-    const MAX_REPLANS = 2;
+    const MAX_HARD_REPLANS = AGENT_MODE === "balanced" ? 6 : 3;
+    const replanAttemptsByReason = new Map<string, number>();
+    const preconditionRecoveryByStepKey = new Map<string, number>();
+    const MAX_PRECONDITION_RECOVERY = 1;
+    let forcedReplanReason: string | null = null;
     let plannedSteps: TestStep[] = [];
     let plannedIndex = 0;
-    let replanCount = 0;
+    let hardReplanCount = 0;
+    let softRecoveryCount = 0;
     let previousContextLength = 0;
     let previousContextModalFlag = false;
     let currentMarkedContext = "";
@@ -166,375 +225,1013 @@ export class AgentService implements IAgent {
     let unchangedCycles = 0;
     let lastVisualSignature = "";
     let fillFirstStrategy = this.shouldUseFillFirstStrategy(goal);
+    const goalRequiresCriticalCommit = this.goalRequiresCriticalCommit(goal);
     let hasSubmittedCriticalAction = false;
+    const runPerfStartMs = this.nowMs();
+    const runStartedAt = Date.now();
+    const MAX_TELEMETRY_CYCLES = 120;
+    const cycleTelemetry: AutopilotCycleTelemetry[] = [];
+    const replanReasonCounters = new Map<string, number>();
+    let retryCount = 0;
+    let domUnchangedCycles = 0;
+    let llmPlanCalls = 0;
+    let llmPlanMsTotal = 0;
+    const PLAN_CHUNK_SIZE = AGENT_MODE === "balanced" ? 4 : 3;
+    const PLAN_HISTORY_WINDOW = 10;
+    const PREFETCH_TRIGGER_REMAINING = 1;
+    let prefetchedPlanPromise: Promise<{
+      steps: TestStep[];
+      domHash: string;
+    }> | null = null;
+    let prefetchedPlanDomHash = "";
+    const llmCounters: TelemetryLLMCounters = {
+      visualCalls: 0,
+      visualMs: 0,
+      outcomeCalls: 0,
+      outcomeMs: 0,
+    };
+    let observeMsTotal = 0;
+    let actMsTotal = 0;
+    let verifyMsTotal = 0;
+    let maxCycleMs = 0;
+    let totalCycleMs = 0;
+    let cycleCounter = 0;
 
     try {
+      if (!settings.openRouterApiKey) {
+        const missingApiKey =
+          "OpenRouter API key is required for Autopilot planning.";
+        this.log("error", `❌ ${missingApiKey}`);
+        reportGen.addError("console", missingApiKey);
+        reportGen.setStatus("FAILED");
+        return;
+      }
+
+      const requestPlanChunk = async (params: {
+        goal: string;
+        fillFirstStrategy: boolean;
+        hasSubmittedCriticalAction: boolean;
+        submitState: SubmitLifecycleState;
+        formProgress: { totalControls: number; filledControls: number };
+        stepsExecuted: number;
+        remainingBudget: number;
+        lastOutcome: "unknown" | "progress" | "no_effect" | "error_detected";
+        domContext: string;
+        previousSteps: TestStep[];
+      }): Promise<{ steps: TestStep[]; planMs: number }> => {
+        const planningContext = [
+          `planner_mode=chunked`,
+          `plan_chunk_max=${PLAN_CHUNK_SIZE}`,
+          `execution_strategy=${params.fillFirstStrategy && !params.hasSubmittedCriticalAction ? "fill_then_validate" : "balanced"}`,
+          `goal_requires_commit=${goalRequiresCriticalCommit ? 1 : 0}`,
+          `critical_commit_done=${params.hasSubmittedCriticalAction ? 1 : 0}`,
+          `submit_state=${params.submitState}`,
+          `form_controls_total=${params.formProgress.totalControls}`,
+          `form_controls_filled=${params.formProgress.filledControls}`,
+          `steps_executed=${params.stepsExecuted}`,
+          `last_outcome=${params.lastOutcome}`,
+          `remaining_budget=${params.remainingBudget}`,
+        ].join("; ");
+
+        const planningPrompt =
+          `${params.fillFirstStrategy ? "[FORM_FILL_FIRST] " : ""}` +
+          `[FULL_PLAN][PLAN_CHUNK_MAX=${PLAN_CHUNK_SIZE}] GOAL: ${params.goal}. ` +
+          `Return only the next executable chunk (max ${PLAN_CHUNK_SIZE} ordered steps), not the full end-to-end map. ` +
+          `Submit lifecycle state: ${params.submitState}. ${this.getPlannerDirectiveForSubmitState(params.submitState)}`;
+        const planStart = this.nowMs();
+        const rawPlan = await this.llmProvider.generateSteps(
+          planningPrompt,
+          planningContext,
+          params.domContext,
+          params.previousSteps.slice(-PLAN_HISTORY_WINDOW),
+        );
+        const planMs = this.elapsedMs(planStart);
+        llmPlanCalls += 1;
+        llmPlanMsTotal += planMs;
+
+        if (!rawPlan || rawPlan.length === 0) {
+          return { steps: [], planMs };
+        }
+
+        return {
+          steps: rawPlan.slice(0, PLAN_CHUNK_SIZE),
+          planMs,
+        };
+      };
+
       while (reportGen.getReport().stepsExecuted < MAX_STEPS) {
-        if (this.shouldStop(reportGen)) break;
-        if (fatalRuntimeError) {
-          this.log("error", `❌ ${fatalRuntimeError}`);
-          reportGen.addError("console", fatalRuntimeError);
-          reportGen.setStatus("FAILED");
-          break;
-        }
+        cycleCounter += 1;
+        const cycle = cycleCounter;
+        const cycleStartedAt = Date.now();
+        const cyclePerfStart = this.nowMs();
+        let cycleAdaptiveMode: "fast" | "normal" | "complex" = "normal";
+        let cycleContextChars = 0;
+        let cycleDomUnchanged = false;
+        let cycleWaitMs = 0;
+        let cycleMarkMs = 0;
+        let cycleContextMs = 0;
+        let cycleVisualScanMs = 0;
+        let cyclePlanMs = 0;
+        let cycleActMs = 0;
+        let cycleVerifyMs = 0;
+        let cycleReplanned = false;
+        let cycleReplanReason: string | undefined;
+        let cyclePlannedSteps = plannedSteps.length;
+        let cyclePlannedIndex = plannedIndex;
+        let cycleStepAction: string | undefined;
+        let cycleStepTargetId: number | undefined;
+        let cycleOutcome: AutopilotCycleTelemetry["outcome"] = "skipped";
 
-        if (this.shouldStop(reportGen)) break;
-        this.log("thinking", "⏳ Waiting for page stability...");
-        await this.domMarker.waitForDOMStability(STABILITY_TIMEOUT);
-        if (this.shouldStop(reportGen)) break;
-        const adaptiveMode = this.pickAdaptiveReadMode(
-          unchangedCycles,
-          reportGen.getReport().stepsExecuted,
-        );
-        this.log("thinking", `👀 Analyzing page (${adaptiveMode} adaptive)...`);
-        await this.domMarker.markInteractiveElements(profileId, adaptiveMode);
-        const markedContext = await this.domMarker.getMarkedContext(profileId);
-        currentMarkedContext = this.compactContext(markedContext, previousMarkedContext);
-        currentElementMetaMap = this.extractElementMetaMap(markedContext);
-        const formProgress = this.getFormProgress(markedContext);
-        if (
-          formProgress.totalControls >= 4 &&
-          reportGen.getReport().stepsExecuted <= 1
-        ) {
-          fillFirstStrategy = true;
-        }
-
-        const currentDomHash = this.computeHash(markedContext);
-        const isDomUnchanged =
-          currentDomHash === this.lastDomHash && this.lastDomHash !== "";
-        this.lastDomHash = currentDomHash;
-        unchangedCycles = isDomUnchanged ? unchangedCycles + 1 : 0;
-        const currentContextLength = markedContext.length;
-        const currentModalFlag = this.hasModalSignals(markedContext);
-
-        if (isDomUnchanged) {
-          this.log("info", "⚠️ DOM hasn't changed since last step.");
-        }
-
-        this.log(
-          "info",
-          `🔍 Context size: ${markedContext.length} chars ${isDomUnchanged ? "(Unchanged)" : ""}`,
-        );
-
-        const previousSteps = reportGen.getReport().steps;
-
-        // 2.2 Check for Visual Errors
-        const visualErrors = await this.domMarker.detectVisualErrors();
-        const visualSignals = await this.domMarker.getVisualSignals();
-        const hasVisualFeedback = visualErrors.length > 0 || visualSignals.length > 0;
-        if (hasVisualFeedback) {
-          const visualSignature = this.computeHash(
-            JSON.stringify({
-              visualErrors,
-              visualSignals: visualSignals.map((s) => ({
-                text: s.text,
-                role: s.role,
-                className: s.className,
-                toneHint: s.toneHint,
-              })),
-            }),
-          );
-          const visualChanged = visualSignature !== lastVisualSignature;
-          lastVisualSignature = visualSignature;
-
-            if (visualChanged) {
-            const deterministicVisualDecision =
-              this.classifyVisualStateDeterministic({
-                visualErrors,
-                visualSignals,
-              });
-            const visualDecision =
-              deterministicVisualDecision.verdict !== "neutral" ||
-              !AI_AVAILABLE
-                ? deterministicVisualDecision
-                : await this.llmProvider.classifyVisualState({
-                    goal,
-                    signals: visualSignals,
-                    previousSteps,
-                  });
-
-            if (
-              visualDecision.verdict === "error" &&
-              visualDecision.confidence >= 0.55
-            ) {
-              if (fillFirstStrategy && !hasSubmittedCriticalAction) {
-                this.log(
-                  "info",
-                  `⏭️ Fill-first active: postponing visual error evaluation until submit. (${visualDecision.confidence.toFixed(2)})`,
-                );
-                this.lastOutcome = isDomUnchanged ? "no_effect" : "progress";
-              } else {
-                this.lastOutcome = "error_detected";
-                const newVisualErrors = visualErrors.filter((err) => {
-                  const normalized = err.trim();
-                  if (!normalized) return false;
-                  if (knownVisualErrors.has(normalized)) return false;
-                  knownVisualErrors.add(normalized);
-                  return true;
-                });
-
-                if (newVisualErrors.length === 0) {
-                  const aiError = `[AI_VISUAL] ${visualDecision.rationale}`;
-                  if (!knownVisualErrors.has(aiError)) {
-                    knownVisualErrors.add(aiError);
-                    newVisualErrors.push(aiError);
-                  }
-                }
-
-                newVisualErrors.forEach((err) => {
-                  this.log("error", `🚨 Visual Error Detected: ${err}`);
-                  reportGen.addError("visual", err);
-                });
-
-                if (lastExecutedWasCriticalCommit) {
-                  const stopReason =
-                    "Se detectó error visual tras acción crítica (submit/save).";
-                  this.log("error", `❌ ${stopReason}`);
-                  reportGen.addError("visual", stopReason);
-                  reportGen.setStatus("FAILED");
-                  break;
-                }
-              }
-            } else if (visualDecision.verdict === "success") {
-              this.log(
-                "info",
-                `✅ Visual feedback classified as success (${visualDecision.confidence.toFixed(2)}): ${visualDecision.rationale}`,
-              );
-            } else if (visualDecision.verdict === "warning") {
-              this.log(
-                "info",
-                `⚠️ Visual feedback warning (${visualDecision.confidence.toFixed(2)}): ${visualDecision.rationale}`,
-              );
-            }
+        try {
+          if (this.shouldStop(reportGen)) {
+            cycleOutcome = "stopped";
+            break;
           }
-        } else if (reportGen.getReport().stepsExecuted > 0) {
-          this.lastOutcome = isDomUnchanged ? "no_effect" : "progress";
-        }
-
-        const nextPlannedStep = plannedSteps[plannedIndex];
-        const requiresReplan =
-          plannedSteps.length === 0 ||
-          plannedIndex >= plannedSteps.length ||
-          this.shouldReplan(
-            isDomUnchanged,
-            previousContextLength,
-            currentContextLength,
-            previousContextModalFlag,
-            currentModalFlag,
-            nextPlannedStep,
-            currentElementMetaMap,
-          );
-
-        if (requiresReplan) {
-          if (plannedSteps.length > 0) {
-            replanCount++;
-            if (replanCount > MAX_REPLANS) {
-              const reason = "Maximum replan attempts reached.";
-              this.log("error", `❌ ${reason}`);
-              reportGen.addError("console", reason);
-              reportGen.setStatus("FAILED");
-              break;
-            }
-            this.log("info", `🔄 Replanning... (${replanCount}/${MAX_REPLANS})`);
-          } else {
-            this.log("thinking", "🧠 Generating initial execution map...");
-          }
-
-          const context = [
-            `planner_mode=full_plan`,
-            `execution_strategy=${fillFirstStrategy && !hasSubmittedCriticalAction ? "fill_then_validate" : "balanced"}`,
-            `form_controls_total=${formProgress.totalControls}`,
-            `form_controls_filled=${formProgress.filledControls}`,
-            `steps_executed=${reportGen.getReport().stepsExecuted}`,
-            `last_outcome=${this.lastOutcome}`,
-            `remaining_budget=${MAX_STEPS - reportGen.getReport().stepsExecuted}`,
-          ].join("; ");
-
-          const newPlan = await this.llmProvider.generateSteps(
-            `${fillFirstStrategy ? "[FORM_FILL_FIRST] " : ""}[FULL_PLAN] GOAL: ${goal}. Build an end-to-end executable map with ordered steps using provided IDs.`,
-            context,
-            currentMarkedContext,
-            previousSteps,
-          );
-
-          if (!newPlan || newPlan.length === 0) {
-            this.log("error", "AI returned an empty execution map. Stopping.");
+          if (fatalRuntimeError) {
+            this.log("error", `❌ ${fatalRuntimeError}`);
+            reportGen.addError("console", fatalRuntimeError);
             reportGen.setStatus("FAILED");
+            cycleOutcome = "failed";
             break;
           }
 
-          plannedSteps = newPlan;
-          plannedIndex = 0;
-          this.log("info", `🗺️ Plan ready with ${plannedSteps.length} steps.`);
-        }
+          if (this.shouldStop(reportGen)) {
+            cycleOutcome = "stopped";
+            break;
+          }
 
-        const nextStep = plannedSteps[plannedIndex];
-        plannedIndex++;
-        this.log("thinking", "🧠 Executing mapped step...");
+          this.log("thinking", "⏳ Waiting for page stability...");
+          const waitStart = this.nowMs();
+          await this.domMarker.waitForDOMStability(STABILITY_TIMEOUT);
+          cycleWaitMs = this.elapsedMs(waitStart);
 
-        if (nextStep.thought) {
-          this.log("thinking", `💭 Thought: ${nextStep.thought}`);
-        }
+          if (this.shouldStop(reportGen)) {
+            cycleOutcome = "stopped";
+            break;
+          }
 
-        if (nextStep.action === "FINISH") {
-          const verification = await this.verifyFinalOutcome({
-            goal,
-            profileId,
-            beforeContext: currentMarkedContext,
-            visualErrors,
-            executedSteps: previousSteps,
-            allowAI: AI_AVAILABLE,
-          });
-          if (verification.verdict === "failure") {
-            this.log(
-              "error",
-              `❌ Final QA verdict: FAILURE (${verification.confidence.toFixed(2)}) - ${verification.rationale}`,
-            );
-            reportGen.addError("visual", verification.rationale);
-            reportGen.setStatus("FAILED");
-          } else if (verification.verdict === "inconclusive") {
+          cycleAdaptiveMode = this.pickAdaptiveReadMode(
+            unchangedCycles,
+            reportGen.getReport().stepsExecuted,
+          );
+          if (
+            fillFirstStrategy &&
+            !hasSubmittedCriticalAction &&
+            cycleAdaptiveMode === "fast"
+          ) {
+            // Keep IDs and context more stable while still filling the form.
+            cycleAdaptiveMode = "normal";
+          }
+          this.log(
+            "thinking",
+            `👀 Analyzing page (${cycleAdaptiveMode} adaptive)...`,
+          );
+
+          const markStart = this.nowMs();
+          await this.domMarker.markInteractiveElements(profileId, cycleAdaptiveMode);
+          cycleMarkMs = this.elapsedMs(markStart);
+
+          const contextStart = this.nowMs();
+          const markedContext = await this.domMarker.getMarkedContext(profileId);
+          cycleContextMs = this.elapsedMs(contextStart);
+
+          currentMarkedContext = this.compactContext(markedContext, previousMarkedContext);
+          currentElementMetaMap = this.extractElementMetaMap(markedContext);
+          const formProgress = this.getFormProgress(markedContext);
+          if (
+            formProgress.totalControls >= 4 &&
+            reportGen.getReport().stepsExecuted <= 1
+          ) {
+            fillFirstStrategy = true;
+          }
+          if (Date.now() > runMemory.expiresAt) {
+            forcedCommitStepIds.clear();
+            checkboxStateByTargetId.clear();
+            checkboxStateTimestampByTargetId.clear();
+            lastForcedCommitTargetId = null;
+            runMemory.lastCommitTargetId = null;
+            runMemory.expiresAt = Date.now() + RUN_MEMORY_TTL_MS;
             this.log(
               "info",
-              `⚠️ Final QA verdict: INCONCLUSIVE (${verification.confidence.toFixed(2)}) - ${verification.rationale}`,
+              "🧠 Transient run memory TTL expired. Resetting ephemeral caches.",
             );
-            reportGen.setStatus("FAILED");
-          } else {
-            this.log(
-              "success",
-              `✅ Final QA verdict: SUCCESS (${verification.confidence.toFixed(2)})`,
-            );
-            reportGen.setStatus("COMPLETED");
           }
-          break;
-        }
+          runMemory.lastTouchedAt = Date.now();
+          runMemory.expiresAt = runMemory.lastTouchedAt + RUN_MEMORY_TTL_MS;
+          const pendingCriticalCommitAction =
+            this.hasPendingCriticalCommitAction(currentElementMetaMap);
+          const derivedSubmitState = this.deriveSubmitLifecycleState({
+            goalRequiresCriticalCommit,
+            pendingCriticalCommitAction,
+            hasSubmittedCriticalAction,
+            fillFirstStrategy,
+            formProgress,
+          });
+          if (derivedSubmitState !== runMemory.submitState) {
+            this.log(
+              "info",
+              `🧭 Submit state: ${runMemory.submitState} -> ${derivedSubmitState}`,
+            );
+          }
+          runMemory.submitState = derivedSubmitState;
 
-        // Loop detection
-        if (this.detectLoop(previousSteps, nextStep)) {
+          const currentDomHash = this.computeHash(markedContext);
+          const isDomUnchanged =
+            currentDomHash === this.lastDomHash && this.lastDomHash !== "";
+          this.lastDomHash = currentDomHash;
+          unchangedCycles = isDomUnchanged ? unchangedCycles + 1 : 0;
+          const currentContextLength = markedContext.length;
+          const currentModalFlag = this.hasModalSignals(markedContext);
+          cycleContextChars = currentContextLength;
+          cycleDomUnchanged = isDomUnchanged;
+
+          if (isDomUnchanged) {
+            this.log("info", "⚠️ DOM hasn't changed since last step.");
+          }
+
           this.log(
             "info",
-            `⚠️ Detected recursive loop. Stopping to avoid infinite execution.`,
+            `🔍 Context size: ${markedContext.length} chars ${isDomUnchanged ? "(Unchanged)" : ""}`,
           );
-          reportGen.setStatus("FAILED"); // Or completed? Failed seems safer for loops.
-          break;
-        }
 
-        const preconditionError = this.validateStepPreconditions(
-          nextStep,
-          currentElementMetaMap,
-        );
-        if (preconditionError) {
-          this.log("error", `❌ Invalid generated step: ${preconditionError}`);
-          reportGen.addError("console", preconditionError);
-          reportGen.setStatus("FAILED");
-          stepResults.push({
-            stepId: nextStep.id,
-            status: "error",
-            timestamp: Date.now(),
-            message: preconditionError,
+          const previousSteps = reportGen.getReport().steps;
+          const plannerHintTargetIds = plannedSteps
+            .slice(plannedIndex, plannedIndex + PLAN_CHUNK_SIZE + 1)
+            .map((step) => step.targetId || 0)
+            .filter((targetId) => targetId > 0);
+          const plannerDomContext = this.compactPlannerContext(markedContext, {
+            priorityTargetIds: plannerHintTargetIds,
+            maxChars:
+              fillFirstStrategy && !hasSubmittedCriticalAction ? 2600 : 2200,
           });
-          break;
-        }
 
-        this.resolveStepData(nextStep, currentElementMetaMap);
+          // 2.2 Check for Visual Errors
+          const visualStart = this.nowMs();
+          const visualErrors = await this.domMarker.detectVisualErrors();
+          const visualSignals = await this.domMarker.getVisualSignals();
+          cycleVisualScanMs = this.elapsedMs(visualStart);
 
-        const lastExecuted = previousSteps[previousSteps.length - 1];
-        const currentStepKey = this.getStepKey(nextStep);
-        if (
-          (this.lastOutcome === "no_effect" ||
-            this.lastOutcome === "error_detected") &&
-          lastExecuted &&
-          lastExecuted.action === nextStep.action &&
-          lastExecuted.targetId === nextStep.targetId
-        ) {
-          const retriesUsed = retryByStepKey.get(currentStepKey) || 0;
-          if (retriesUsed >= MAX_RETRIES_NON_CRITICAL) {
-            const repeatedNoEffectError =
-              "Repeated same action+target after no_effect/error outcome";
-            this.log("error", `❌ ${repeatedNoEffectError}`);
-            reportGen.addError("console", repeatedNoEffectError);
+          const hasVisualFeedback =
+            visualErrors.length > 0 || visualSignals.length > 0;
+          if (hasVisualFeedback) {
+            const visualSignature = this.computeHash(
+              JSON.stringify({
+                visualErrors,
+                visualSignals: visualSignals.map((s) => ({
+                  text: s.text,
+                  role: s.role,
+                  className: s.className,
+                  toneHint: s.toneHint,
+                })),
+              }),
+            );
+            const visualChanged = visualSignature !== lastVisualSignature;
+            lastVisualSignature = visualSignature;
+
+            if (visualChanged) {
+              const deterministicVisualDecision =
+                this.classifyVisualStateDeterministic({
+                  visualErrors,
+                  visualSignals,
+                });
+              let visualDecision = deterministicVisualDecision;
+              if (
+                deterministicVisualDecision.verdict === "neutral" &&
+                AI_AVAILABLE
+              ) {
+                const visualClassifyStart = this.nowMs();
+                visualDecision = await this.llmProvider.classifyVisualState({
+                  goal,
+                  signals: visualSignals,
+                  previousSteps,
+                });
+                const visualClassifyMs = this.elapsedMs(visualClassifyStart);
+                llmCounters.visualCalls += 1;
+                llmCounters.visualMs += visualClassifyMs;
+              }
+
+              if (
+                visualDecision.verdict === "error" &&
+                visualDecision.confidence >= 0.55
+              ) {
+                if (fillFirstStrategy && !hasSubmittedCriticalAction) {
+                  this.log(
+                    "info",
+                    `⏭️ Fill-first active: postponing visual error evaluation until submit. (${visualDecision.confidence.toFixed(2)})`,
+                  );
+                  this.lastOutcome = isDomUnchanged ? "no_effect" : "progress";
+                } else {
+                  this.lastOutcome = "error_detected";
+                  const newVisualErrors = visualErrors.filter((err) => {
+                    const normalized = err.trim();
+                    if (!normalized) return false;
+                    if (knownVisualErrors.has(normalized)) return false;
+                    knownVisualErrors.add(normalized);
+                    return true;
+                  });
+
+                  if (newVisualErrors.length === 0) {
+                    const aiError = `[AI_VISUAL] ${visualDecision.rationale}`;
+                    if (!knownVisualErrors.has(aiError)) {
+                      knownVisualErrors.add(aiError);
+                      newVisualErrors.push(aiError);
+                    }
+                  }
+
+                  newVisualErrors.forEach((err) => {
+                    this.log("error", `🚨 Visual Error Detected: ${err}`);
+                    reportGen.addError("visual", err);
+                  });
+
+                  if (lastExecutedWasCriticalCommit) {
+                    const stopReason =
+                      "Se detectó error visual tras acción crítica (submit/save).";
+                    this.log("error", `❌ ${stopReason}`);
+                    reportGen.addError("visual", stopReason);
+                    reportGen.setStatus("FAILED");
+                    cycleOutcome = "failed";
+                    break;
+                  }
+                }
+              } else if (visualDecision.verdict === "success") {
+                this.log(
+                  "info",
+                  `✅ Visual feedback classified as success (${visualDecision.confidence.toFixed(2)}): ${visualDecision.rationale}`,
+                );
+              } else if (visualDecision.verdict === "warning") {
+                this.log(
+                  "info",
+                  `⚠️ Visual feedback warning (${visualDecision.confidence.toFixed(2)}): ${visualDecision.rationale}`,
+                );
+              }
+            }
+          } else if (reportGen.getReport().stepsExecuted > 0) {
+            this.lastOutcome = isDomUnchanged ? "no_effect" : "progress";
+          }
+
+          const nextPlannedStep = plannedSteps[plannedIndex];
+          const rawReplanReason =
+            plannedSteps.length === 0
+              ? "empty_plan"
+              : plannedIndex >= plannedSteps.length
+                ? "plan_exhausted"
+                : this.getReplanReason(
+                    isDomUnchanged,
+                    previousContextLength,
+                    currentContextLength,
+                    previousContextModalFlag,
+                    currentModalFlag,
+                    nextPlannedStep,
+                    currentElementMetaMap,
+                  );
+          const replanReason =
+            rawReplanReason === "empty_plan" && forcedReplanReason
+              ? forcedReplanReason
+              : rawReplanReason;
+          if (rawReplanReason === "empty_plan" && forcedReplanReason) {
+            forcedReplanReason = null;
+          }
+          const requiresReplan = !!replanReason;
+
+          if (requiresReplan && replanReason) {
+            this.incrementCounter(replanReasonCounters, replanReason);
+
+            if (
+              this.shouldSuppressReplan(
+                replanReason,
+                fillFirstStrategy,
+                hasSubmittedCriticalAction,
+                this.lastOutcome,
+              )
+            ) {
+              cycleReplanReason = `suppressed:${replanReason}`;
+              this.log(
+                "info",
+                `⏭️ Replan suppressed (${replanReason}) to preserve flow continuity.`,
+              );
+            } else {
+              const reasonBudget = this.getReplanBudget(replanReason, AGENT_MODE);
+              const reasonAttempts = (replanAttemptsByReason.get(replanReason) || 0) + 1;
+              replanAttemptsByReason.set(replanReason, reasonAttempts);
+              if (reasonAttempts > reasonBudget) {
+                const reason =
+                  `Replan budget exceeded for reason "${replanReason}" ` +
+                  `(${reasonAttempts - 1}/${reasonBudget}).`;
+                this.log("error", `❌ ${reason}`);
+                reportGen.addError("console", reason);
+                reportGen.setStatus("FAILED");
+                cycleOutcome = "failed";
+                break;
+              }
+
+              let hardReplanRequired = true;
+              const severity = this.getReplanSeverity(replanReason);
+              if (severity === "soft" && plannedSteps.length > 0) {
+                const nextExecutableIndex = this.findNextExecutablePlanIndex(
+                  plannedSteps,
+                  plannedIndex + 1,
+                  currentElementMetaMap,
+                );
+                if (nextExecutableIndex !== null) {
+                  softRecoveryCount++;
+                  plannedIndex = nextExecutableIndex;
+                  cyclePlannedIndex = plannedIndex;
+                  cyclePlannedSteps = plannedSteps.length;
+                  cycleReplanned = true;
+                  cycleReplanReason = `soft:${replanReason}`;
+                  hardReplanRequired = false;
+                  this.log(
+                    "info",
+                    `🩹 Soft recovery applied (${replanReason}). Jumping to planned step ${plannedIndex + 1}/${plannedSteps.length}.`,
+                  );
+                } else {
+                  this.log(
+                    "info",
+                    `🧱 Soft recovery unavailable for ${replanReason}. Escalating to hard replan.`,
+                  );
+                }
+              }
+
+              if (hardReplanRequired) {
+                cycleReplanned = true;
+                cycleReplanReason = `hard:${replanReason}`;
+                const countsAsHardReplan = replanReason !== "plan_exhausted";
+                if (countsAsHardReplan) {
+                  hardReplanCount++;
+                  if (hardReplanCount > MAX_HARD_REPLANS) {
+                    const reason =
+                      `Maximum hard replan attempts reached ` +
+                      `(${hardReplanCount - 1}/${MAX_HARD_REPLANS}).`;
+                    this.log("error", `❌ ${reason}`);
+                    reportGen.addError("console", reason);
+                    reportGen.setStatus("FAILED");
+                    cycleOutcome = "failed";
+                    break;
+                  }
+                }
+
+                if (plannedSteps.length > 0) {
+                  if (replanReason === "plan_exhausted") {
+                    this.log(
+                      "info",
+                      "🔁 Current chunk exhausted. Refreshing next plan chunk...",
+                    );
+                  } else {
+                    this.log(
+                      "info",
+                      `🔄 Hard replanning... (${hardReplanCount}/${MAX_HARD_REPLANS}) reason=${replanReason}`,
+                    );
+                  }
+                } else {
+                  this.log("thinking", "🧠 Generating initial execution map...");
+                }
+
+                let newPlan: TestStep[] = [];
+                if (
+                  replanReason === "plan_exhausted" &&
+                  prefetchedPlanPromise &&
+                  prefetchedPlanDomHash === currentDomHash
+                ) {
+                  const prefetchWaitStart = this.nowMs();
+                  const prefetched: { steps: TestStep[]; domHash: string } =
+                    await prefetchedPlanPromise;
+                  cyclePlanMs += this.elapsedMs(prefetchWaitStart);
+                  prefetchedPlanPromise = null;
+                  prefetchedPlanDomHash = "";
+                  if (
+                    prefetched.steps.length > 0 &&
+                    prefetched.domHash === currentDomHash
+                  ) {
+                    newPlan = prefetched.steps;
+                    this.log(
+                      "info",
+                      `⚡ Prefetched plan chunk reused (${newPlan.length} steps).`,
+                    );
+                  }
+                }
+
+                if (newPlan.length === 0) {
+                  const requestedPlan = await requestPlanChunk({
+                    goal,
+                    fillFirstStrategy,
+                    hasSubmittedCriticalAction,
+                    submitState: runMemory.submitState,
+                    formProgress,
+                    stepsExecuted: reportGen.getReport().stepsExecuted,
+                    remainingBudget: MAX_STEPS - reportGen.getReport().stepsExecuted,
+                    lastOutcome: this.lastOutcome,
+                    domContext: plannerDomContext,
+                    previousSteps,
+                  });
+                  cyclePlanMs += requestedPlan.planMs;
+                  newPlan = requestedPlan.steps;
+                }
+                prefetchedPlanPromise = null;
+                prefetchedPlanDomHash = "";
+
+                if (!newPlan || newPlan.length === 0) {
+                  this.log("error", "AI returned an empty execution map. Stopping.");
+                  reportGen.setStatus("FAILED");
+                  cycleOutcome = "failed";
+                  break;
+                }
+
+                plannedSteps = newPlan;
+                plannedIndex = 0;
+                this.log(
+                  "info",
+                  `🗺️ Plan ready with ${plannedSteps.length} chunked steps.`,
+                );
+              }
+            }
+          }
+
+          const remainingPlannedSteps = plannedSteps.length - plannedIndex;
+          if (
+            !prefetchedPlanPromise &&
+            remainingPlannedSteps > 0 &&
+            remainingPlannedSteps <= PREFETCH_TRIGGER_REMAINING &&
+            plannedSteps[plannedIndex]?.action !== "FINISH"
+          ) {
+            const prefetchDomHash: string = currentDomHash;
+            prefetchedPlanDomHash = prefetchDomHash;
+            this.log(
+              "thinking",
+              `⚡ Prefetching next plan chunk (max ${PLAN_CHUNK_SIZE} steps)...`,
+            );
+            prefetchedPlanPromise = requestPlanChunk({
+              goal,
+              fillFirstStrategy,
+              hasSubmittedCriticalAction,
+              submitState: runMemory.submitState,
+              formProgress,
+              stepsExecuted: reportGen.getReport().stepsExecuted,
+              remainingBudget: MAX_STEPS - reportGen.getReport().stepsExecuted,
+              lastOutcome: this.lastOutcome,
+              domContext: plannerDomContext,
+              previousSteps,
+            })
+              .then((result) => ({
+                steps: result.steps,
+                domHash: prefetchDomHash,
+              }))
+              .catch((error) => {
+                const message =
+                  error instanceof Error ? error.message : String(error);
+                this.log(
+                  "info",
+                  `⚠️ Plan prefetch skipped: ${message.slice(0, 180)}`,
+                );
+                return { steps: [], domHash: prefetchDomHash };
+              });
+          }
+
+          const nextStep = plannedSteps[plannedIndex];
+          plannedIndex++;
+          cyclePlannedSteps = plannedSteps.length;
+          cyclePlannedIndex = plannedIndex;
+          cycleStepAction = nextStep?.action;
+          cycleStepTargetId = nextStep?.targetId;
+          this.log("thinking", "🧠 Executing mapped step...");
+
+          if (nextStep?.thought) {
+            this.log("thinking", `💭 Thought: ${nextStep.thought}`);
+          }
+
+          if (nextStep.action === "FINISH") {
+            const mustCommitBeforeFinish =
+              (goalRequiresCriticalCommit || pendingCriticalCommitAction) &&
+              !hasSubmittedCriticalAction;
+            if (
+              mustCommitBeforeFinish &&
+              runMemory.submitState === "filling"
+            ) {
+              this.incrementCounter(
+                replanReasonCounters,
+                "finish_before_form_complete",
+              );
+              cycleReplanned = true;
+              cycleReplanReason = "hard:finish_before_form_complete";
+              cycleOutcome = "retry";
+              plannedSteps = [];
+              plannedIndex = 0;
+              forcedReplanReason = "finish_before_form_complete";
+              this.lastOutcome = "no_effect";
+              this.log(
+                "info",
+                "🧭 FINISH blocked: form still in filling state before required commit. Regenerating plan.",
+              );
+              continue;
+            }
+
+            if (
+              mustCommitBeforeFinish &&
+              (runMemory.submitState === "ready_to_commit" ||
+                runMemory.submitState === "commit_in_flight")
+            ) {
+              const fallbackCommitTargetId =
+                this.findCriticalCommitTargetId(currentElementMetaMap);
+              if (fallbackCommitTargetId) {
+                if (fallbackCommitTargetId === lastForcedCommitTargetId) {
+                  this.incrementCounter(
+                    replanReasonCounters,
+                    "finish_fallback_duplicate_target",
+                  );
+                  cycleReplanned = true;
+                  cycleReplanReason = "hard:finish_without_commit";
+                  cycleOutcome = "retry";
+                  plannedSteps = [];
+                  plannedIndex = 0;
+                  forcedReplanReason = "finish_without_commit";
+                  this.lastOutcome = "no_effect";
+                  this.log(
+                    "info",
+                    `🧷 FINISH fallback target repeated (ID [${fallbackCommitTargetId}]). Regenerating plan instead of reinjecting duplicate click.`,
+                  );
+                  continue;
+                }
+                const fallbackCommitStep: TestStep = {
+                  id: crypto.randomUUID(),
+                  action: "CLICK",
+                  selector: "body",
+                  targetId: fallbackCommitTargetId,
+                  delay: 500,
+                  order: nextStep.order,
+                  thought: "Fallback commit click before final verification.",
+                };
+                forcedCommitStepIds.add(fallbackCommitStep.id);
+                lastForcedCommitTargetId = fallbackCommitTargetId;
+                runMemory.lastCommitTargetId = fallbackCommitTargetId;
+                const syntheticFinishStep: TestStep = {
+                  ...nextStep,
+                  id: crypto.randomUUID(),
+                  order: (nextStep.order || 0) + 1,
+                  thought: "Finish after fallback commit click.",
+                };
+                plannedIndex = Math.max(plannedIndex - 1, 0);
+                plannedSteps.splice(
+                  plannedIndex,
+                  1,
+                  fallbackCommitStep,
+                  syntheticFinishStep,
+                );
+                cycleReplanned = true;
+                cycleReplanReason = "soft:inject_commit_step";
+                cycleOutcome = "retry";
+                this.log(
+                  "info",
+                  `🧷 FINISH intercepted. Injecting fallback commit click on ID [${fallbackCommitTargetId}] before final verification.`,
+                );
+                continue;
+              }
+              this.incrementCounter(replanReasonCounters, "finish_without_commit");
+              cycleReplanned = true;
+              cycleReplanReason = "hard:finish_without_commit";
+              cycleOutcome = "retry";
+              plannedSteps = [];
+              plannedIndex = 0;
+              forcedReplanReason = "finish_without_commit";
+              this.lastOutcome = "no_effect";
+              this.log(
+                "info",
+                "🧭 FINISH blocked: goal still requires submit/commit action. Regenerating plan.",
+              );
+              continue;
+            }
+          }
+
+          if (nextStep.action === "FINISH") {
+            const verifyStart = this.nowMs();
+            const verification = await this.verifyFinalOutcome({
+              goal,
+              profileId,
+              beforeContext: currentMarkedContext,
+              visualErrors,
+              executedSteps: previousSteps,
+              allowAI: AI_AVAILABLE,
+              telemetryCounters: llmCounters,
+            });
+            cycleVerifyMs = this.elapsedMs(verifyStart);
+            if (verification.verdict === "failure") {
+              this.log(
+                "error",
+                `❌ Final QA verdict: FAILURE (${verification.confidence.toFixed(2)}) - ${verification.rationale}`,
+              );
+              reportGen.addError("visual", verification.rationale);
+              reportGen.setStatus("FAILED");
+            } else if (verification.verdict === "inconclusive") {
+              this.log(
+                "info",
+                `⚠️ Final QA verdict: INCONCLUSIVE (${verification.confidence.toFixed(2)}) - ${verification.rationale}`,
+              );
+              reportGen.setStatus("FAILED");
+            } else {
+              this.log(
+                "success",
+                `✅ Final QA verdict: SUCCESS (${verification.confidence.toFixed(2)})`,
+              );
+              runMemory.submitState = "verified";
+              reportGen.setStatus("COMPLETED");
+            }
+            cycleOutcome = "finish";
+            break;
+          }
+
+          if (
+            hasSubmittedCriticalAction &&
+            nextStep.action === "CLICK" &&
+            this.isCriticalCommitAction(nextStep, currentElementMetaMap) &&
+            nextStep.targetId &&
+            runMemory.lastCommitTargetId === nextStep.targetId
+          ) {
+            this.incrementCounter(replanReasonCounters, "duplicate_commit_click");
+            cycleReplanned = true;
+            cycleReplanReason = "soft:duplicate_commit_click";
+            cycleOutcome = "retry";
+            this.log(
+              "info",
+              `🧷 Duplicate commit click suppressed on ID [${nextStep.targetId}] after successful commit.`,
+            );
+            continue;
+          }
+
+          // Loop detection
+          if (this.detectLoop(previousSteps, nextStep)) {
+            this.log(
+              "info",
+              `⚠️ Detected recursive loop. Stopping to avoid infinite execution.`,
+            );
+            reportGen.setStatus("FAILED"); // Or completed? Failed seems safer for loops.
+            cycleOutcome = "failed";
+            break;
+          }
+
+          const preconditionError = this.validateStepPreconditions(
+            nextStep,
+            currentElementMetaMap,
+          );
+          if (preconditionError) {
+            const preconditionStepKey = this.getStepKey(nextStep);
+            const preconditionRecoveryAttempts =
+              preconditionRecoveryByStepKey.get(preconditionStepKey) || 0;
+            if (
+              this.isRecoverablePreconditionError(preconditionError) &&
+              preconditionRecoveryAttempts < MAX_PRECONDITION_RECOVERY
+            ) {
+              preconditionRecoveryByStepKey.set(
+                preconditionStepKey,
+                preconditionRecoveryAttempts + 1,
+              );
+              this.incrementCounter(
+                replanReasonCounters,
+                "precondition_mismatch",
+              );
+              cycleReplanned = true;
+              cycleReplanReason = "hard:precondition_mismatch";
+              cycleOutcome = "retry";
+              plannedSteps = [];
+              plannedIndex = 0;
+              this.log(
+                "info",
+                `🛠️ Recoverable precondition mismatch detected (${preconditionError}). Forcing plan regeneration.`,
+              );
+              continue;
+            }
+            this.log("error", `❌ Invalid generated step: ${preconditionError}`);
+            reportGen.addError("console", preconditionError);
             reportGen.setStatus("FAILED");
             stepResults.push({
               stepId: nextStep.id,
               status: "error",
               timestamp: Date.now(),
-              message: repeatedNoEffectError,
+              message: preconditionError,
             });
+            cycleOutcome = "failed";
             break;
           }
 
-          retryByStepKey.set(currentStepKey, retriesUsed + 1);
-          this.log(
-            "info",
-            `🔁 Reintento no crítico ${retriesUsed + 1}/${MAX_RETRIES_NON_CRITICAL} para ${nextStep.action} [${nextStep.targetId}]`,
-          );
-          plannedIndex = Math.max(plannedIndex - 1, 0);
+          this.resolveStepData(nextStep, currentElementMetaMap);
+
+          if (
+            (nextStep.action === "CHECK" || nextStep.action === "UNCHECK") &&
+            nextStep.targetId
+          ) {
+            const desiredChecked = nextStep.action === "CHECK";
+            const observedState = this.getCheckboxStateFromMeta(
+              currentElementMetaMap.get(nextStep.targetId),
+            );
+            if (observedState !== null) {
+              checkboxStateByTargetId.set(nextStep.targetId, observedState);
+            }
+            const knownState = checkboxStateByTargetId.get(nextStep.targetId);
+            const lastStateTs =
+              checkboxStateTimestampByTargetId.get(nextStep.targetId) || 0;
+            const withinAntiFlipWindow =
+              Date.now() - lastStateTs <= CHECKBOX_ANTI_FLIP_WINDOW_MS;
+
+            if (knownState === desiredChecked) {
+              this.log(
+                "info",
+                `🧩 Anti-flip: skipping redundant ${nextStep.action} on ID [${nextStep.targetId}] (state already ${desiredChecked ? "checked" : "unchecked"}).`,
+              );
+              cycleReplanned = true;
+              cycleReplanReason = "soft:checkbox_anti_flip";
+              cycleOutcome = "retry";
+              continue;
+            }
+
+            if (
+              knownState !== undefined &&
+              knownState !== desiredChecked &&
+              withinAntiFlipWindow
+            ) {
+              this.log(
+                "info",
+                `🧩 Anti-flip: blocked contradictory ${nextStep.action} on ID [${nextStep.targetId}] within ${CHECKBOX_ANTI_FLIP_WINDOW_MS}ms window.`,
+              );
+              cycleReplanned = true;
+              cycleReplanReason = "soft:checkbox_anti_flip";
+              cycleOutcome = "retry";
+              continue;
+            }
+          }
+
+          const lastExecuted = previousSteps[previousSteps.length - 1];
+          const currentStepKey = this.getStepKey(nextStep);
+          if (
+            (this.lastOutcome === "no_effect" ||
+              this.lastOutcome === "error_detected") &&
+            lastExecuted &&
+            lastExecuted.action === nextStep.action &&
+            lastExecuted.targetId === nextStep.targetId
+          ) {
+            const retriesUsed = retryByStepKey.get(currentStepKey) || 0;
+            if (retriesUsed >= MAX_RETRIES_NON_CRITICAL) {
+              const repeatedNoEffectError =
+                "Repeated same action+target after no_effect/error outcome";
+              this.log("error", `❌ ${repeatedNoEffectError}`);
+              reportGen.addError("console", repeatedNoEffectError);
+              reportGen.setStatus("FAILED");
+              stepResults.push({
+                stepId: nextStep.id,
+                status: "error",
+                timestamp: Date.now(),
+                message: repeatedNoEffectError,
+              });
+              cycleOutcome = "failed";
+              break;
+            }
+
+            retryByStepKey.set(currentStepKey, retriesUsed + 1);
+            retryCount += 1;
+            this.log(
+              "info",
+              `🔁 Reintento no crítico ${retriesUsed + 1}/${MAX_RETRIES_NON_CRITICAL} para ${nextStep.action} [${nextStep.targetId}]`,
+            );
+            plannedIndex = Math.max(plannedIndex - 1, 0);
+            previousContextLength = currentContextLength;
+            previousContextModalFlag = currentModalFlag;
+            previousMarkedContext = markedContext;
+            cycleOutcome = "retry";
+            continue;
+          } else {
+            retryByStepKey.set(currentStepKey, 0);
+          }
+
+          // 4. Act
+          if (this.shouldStop(reportGen)) {
+            cycleOutcome = "stopped";
+            break;
+          }
+
+          try {
+            lastExecutedWasCriticalCommit =
+              forcedCommitStepIds.has(nextStep.id) ||
+              this.isCriticalCommitAction(nextStep, currentElementMetaMap);
+            if (lastExecutedWasCriticalCommit) {
+              runMemory.submitState = "commit_in_flight";
+              if (nextStep.targetId) {
+                runMemory.lastCommitTargetId = nextStep.targetId;
+              }
+            }
+            const actStart = this.nowMs();
+            if (nextStep.targetId) {
+              this.log(
+                "action",
+                `👉 Executing: ${nextStep.action} on ID [${nextStep.targetId}]`,
+              );
+              await this.domMarker.executeActionOnMarkedElement(
+                profileId,
+                nextStep.targetId,
+                nextStep.action as any,
+                nextStep.value,
+              );
+            } else {
+              this.log(
+                "action",
+                `👉 Executing: ${nextStep.action} on ${nextStep.selector}`,
+              );
+              await this.inspector.executeStep(nextStep);
+            }
+            cycleActMs = this.elapsedMs(actStart);
+
+            reportGen.addStep(nextStep);
+            if (lastExecutedWasCriticalCommit) {
+              hasSubmittedCriticalAction = true;
+              runMemory.submitState = "committed";
+            }
+            if (
+              (nextStep.action === "CHECK" || nextStep.action === "UNCHECK") &&
+              nextStep.targetId
+            ) {
+              checkboxStateByTargetId.set(
+                nextStep.targetId,
+                nextStep.action === "CHECK",
+              );
+              checkboxStateTimestampByTargetId.set(nextStep.targetId, Date.now());
+            }
+            stepResults.push({
+              stepId: nextStep.id,
+              status: "success",
+              timestamp: Date.now(),
+              message: "Step executed",
+            });
+            this.log("success", "✅ Step executed.");
+            cycleOutcome = "executed";
+            if (EFFECTIVE_STEP_DELAY > 0) {
+              await new Promise((r) => setTimeout(r, EFFECTIVE_STEP_DELAY));
+            }
+          } catch (execErr) {
+            const execMessage =
+              execErr instanceof Error ? execErr.message : String(execErr);
+            this.log("error", `❌ Step failed: ${execMessage}`);
+            reportGen.addError("console", execMessage);
+            reportGen.setStatus("FAILED");
+            stepResults.push({
+              stepId: nextStep.id,
+              status: "error",
+              timestamp: Date.now(),
+              message: execMessage,
+            });
+            cycleOutcome = "failed";
+            break;
+          }
+
           previousContextLength = currentContextLength;
           previousContextModalFlag = currentModalFlag;
           previousMarkedContext = markedContext;
-          continue;
-        } else {
-          retryByStepKey.set(currentStepKey, 0);
-        }
+        } finally {
+          const observeMs =
+            cycleWaitMs + cycleMarkMs + cycleContextMs + cycleVisualScanMs;
+          observeMsTotal += observeMs;
+          actMsTotal += cycleActMs;
+          verifyMsTotal += cycleVerifyMs;
+          if (cycleDomUnchanged) {
+            domUnchangedCycles += 1;
+          }
+          const cycleDurationMs = this.elapsedMs(cyclePerfStart);
+          totalCycleMs += cycleDurationMs;
+          if (cycleDurationMs > maxCycleMs) {
+            maxCycleMs = cycleDurationMs;
+          }
 
-        // 4. Act
-        if (this.shouldStop(reportGen)) break;
+          if (cycleTelemetry.length < MAX_TELEMETRY_CYCLES) {
+            cycleTelemetry.push({
+              cycle,
+              startedAt: cycleStartedAt,
+              durationMs: cycleDurationMs,
+              adaptiveMode: cycleAdaptiveMode,
+              contextChars: cycleContextChars,
+              domUnchanged: cycleDomUnchanged,
+              unchangedCycles,
+              waitMs: cycleWaitMs,
+              markMs: cycleMarkMs,
+              contextMs: cycleContextMs,
+              visualScanMs: cycleVisualScanMs,
+              planMs: cyclePlanMs,
+              actMs: cycleActMs,
+              verifyMs: cycleVerifyMs,
+              replanned: cycleReplanned,
+              replanReason: cycleReplanReason,
+              plannedSteps: cyclePlannedSteps,
+              plannedIndex: cyclePlannedIndex,
+              stepAction: cycleStepAction,
+              stepTargetId: cycleStepTargetId,
+              outcome: cycleOutcome,
+            });
+          }
 
-        try {
-          lastExecutedWasCriticalCommit = this.isCriticalCommitAction(
-            nextStep,
-            currentElementMetaMap,
-          );
-          if (nextStep.targetId) {
+          if (
+            cycleReplanned ||
+            cycleOutcome === "failed" ||
+            cycleDurationMs > 1800
+          ) {
             this.log(
-              "action",
-              `👉 Executing: ${nextStep.action} on ID [${nextStep.targetId}]`,
+              "info",
+              `📈 Cycle ${cycle}: total=${cycleDurationMs}ms observe=${observeMs}ms plan=${cyclePlanMs}ms act=${cycleActMs}ms`,
             );
-            await this.domMarker.executeActionOnMarkedElement(
-              profileId,
-              nextStep.targetId,
-              nextStep.action as any,
-              nextStep.value,
-            );
-          } else {
-            this.log(
-              "action",
-              `👉 Executing: ${nextStep.action} on ${nextStep.selector}`,
-            );
-            await this.inspector.executeStep(nextStep);
           }
-
-          reportGen.addStep(nextStep);
-          if (lastExecutedWasCriticalCommit) {
-            hasSubmittedCriticalAction = true;
-          }
-          stepResults.push({
-            stepId: nextStep.id,
-            status: "success",
-            timestamp: Date.now(),
-            message: "Step executed",
-          });
-          this.log("success", "✅ Step executed.");
-          if (EFFECTIVE_STEP_DELAY > 0) {
-            await new Promise((r) => setTimeout(r, EFFECTIVE_STEP_DELAY));
-          }
-        } catch (execErr) {
-          const execMessage =
-            execErr instanceof Error ? execErr.message : String(execErr);
-          this.log("error", `❌ Step failed: ${execMessage}`);
-          reportGen.addError("console", execMessage);
-          reportGen.setStatus("FAILED");
-          stepResults.push({
-            stepId: nextStep.id,
-            status: "error",
-            timestamp: Date.now(),
-            message: execMessage,
-          });
-          break;
         }
-
-        previousContextLength = currentContextLength;
-        previousContextModalFlag = currentModalFlag;
-        previousMarkedContext = markedContext;
       }
 
       // Cleanup
@@ -560,12 +1257,62 @@ export class AgentService implements IAgent {
     } finally {
       this._isRunning = false;
       this.stopRequested = false;
+      forcedCommitStepIds.clear();
+      checkboxStateByTargetId.clear();
+      checkboxStateTimestampByTargetId.clear();
+      lastForcedCommitTargetId = null;
+      runMemory.lastCommitTargetId = null;
+      runMemory.submitState = "verified";
+      runMemory.expiresAt = 0;
+      runMemory.lastTouchedAt = Date.now();
 
       const finalReport = reportGen.finalize();
+      const runEndedAt = Date.now();
+      const runDurationMs = this.elapsedMs(runPerfStartMs);
+      const avgCycleMs =
+        cycleCounter > 0
+          ? this.roundMs(totalCycleMs / cycleCounter)
+          : 0;
+      const telemetry: AutopilotTelemetry = {
+        summary: {
+          schemaVersion: 1,
+          runStartedAt,
+          runEndedAt,
+          durationMs: runDurationMs,
+          cycles: cycleCounter,
+          stepsExecuted: finalReport.stepsExecuted,
+          replans: hardReplanCount,
+          retries: retryCount,
+          domUnchangedCycles,
+          llmPlanCalls,
+          llmPlanMsTotal: this.roundMs(llmPlanMsTotal),
+          llmVisualCalls: llmCounters.visualCalls,
+          llmVisualMsTotal: this.roundMs(llmCounters.visualMs),
+          llmOutcomeCalls: llmCounters.outcomeCalls,
+          llmOutcomeMsTotal: this.roundMs(llmCounters.outcomeMs),
+          observeMsTotal: this.roundMs(observeMsTotal),
+          actMsTotal: this.roundMs(actMsTotal),
+          verifyMsTotal: this.roundMs(verifyMsTotal),
+          avgCycleMs,
+          maxCycleMs: this.roundMs(maxCycleMs),
+          replanReasons: Object.fromEntries(replanReasonCounters.entries()),
+        },
+        cycles: cycleTelemetry,
+      };
+
+      this.log(
+        "info",
+        `📈 Perf summary: cycles=${telemetry.summary.cycles}, hardReplans=${telemetry.summary.replans}, softRecoveries=${softRecoveryCount}, retries=${telemetry.summary.retries}, avgCycle=${telemetry.summary.avgCycleMs}ms`,
+      );
       this.log("info", `📊 Report generated. Status: ${finalReport.status}`);
 
       // Save to History
-      await this.saveHistory(finalReport, stepResults, capturedConsoleLogs);
+      await this.saveHistory(
+        finalReport,
+        stepResults,
+        capturedConsoleLogs,
+        telemetry,
+      );
     }
   }
 
@@ -661,10 +1408,125 @@ export class AgentService implements IAgent {
       : compacted;
   }
 
+  private compactPlannerContext(
+    markedContext: string,
+    options: {
+      priorityTargetIds: number[];
+      maxChars: number;
+    },
+  ): string {
+    const lines = markedContext.split("\n").filter((line) => line.trim().length > 0);
+    if (lines.length === 0) return "";
+    const selected: string[] = [];
+    const seen = new Set<string>();
+    const priorityIds = new Set(
+      options.priorityTargetIds.filter((targetId) => targetId > 0),
+    );
+    const pushLine = (line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed || seen.has(trimmed)) return;
+      seen.add(trimmed);
+      selected.push(trimmed);
+    };
+    const extractId = (line: string): number | null => {
+      const match = line.match(/^\[(\d+)\]/);
+      if (!match) return null;
+      const parsed = Number(match[1]);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    for (const line of lines) {
+      const id = extractId(line);
+      if (id !== null && priorityIds.has(id)) {
+        pushLine(line);
+      }
+    }
+
+    const controlRegex =
+      /<input|<select|<textarea|checkbox|radio|type=|placeholder=|name=/i;
+    const commitRegex =
+      /(submit|enviar|save|guardar|create|crear|register|signup|sign up|finish|finalizar|confirm|checkout|terms|privacy)/i;
+    const feedbackRegex =
+      /(error|invalid|required|warning|alert|success|completed|failed)/i;
+
+    for (const line of lines) {
+      if (
+        controlRegex.test(line) ||
+        commitRegex.test(line) ||
+        feedbackRegex.test(line)
+      ) {
+        pushLine(line);
+      }
+    }
+
+    const MIN_BASELINE_LINES = 24;
+    for (const line of lines) {
+      if (selected.length >= MIN_BASELINE_LINES) break;
+      pushLine(line);
+    }
+
+    const compacted = selected.join("\n");
+    return compacted.length > options.maxChars
+      ? compacted.slice(0, options.maxChars) + "\n...[planner context truncated]"
+      : compacted;
+  }
+
   private shouldUseFillFirstStrategy(goal: string): boolean {
     return /(form|formulario|registro|register|signup|sign up|create user|crear usuario|fill|llenar)/i.test(
       goal,
     );
+  }
+
+  private goalRequiresCriticalCommit(goal: string): boolean {
+    return (
+      /(submit|enviar|save|guardar|register|signup|sign up|checkout|confirm|finish|finalizar)/i.test(
+        goal,
+      ) ||
+      /create\s+(an?\s+)?account/i.test(goal) ||
+      /crear\s+(la\s+)?cuenta/i.test(goal) ||
+      /(bot[oó]n|btn|button).*(crear|create|submit|guardar|save)/i.test(goal)
+    );
+  }
+
+  private deriveSubmitLifecycleState(params: {
+    goalRequiresCriticalCommit: boolean;
+    pendingCriticalCommitAction: boolean;
+    hasSubmittedCriticalAction: boolean;
+    fillFirstStrategy: boolean;
+    formProgress: { totalControls: number; filledControls: number };
+  }): SubmitLifecycleState {
+    if (params.hasSubmittedCriticalAction) return "committed";
+
+    const requiresCommit =
+      params.goalRequiresCriticalCommit || params.pendingCriticalCommitAction;
+    if (!requiresCommit) return "ready_to_commit";
+
+    const hasMeaningfulForm =
+      params.formProgress.totalControls >= 4 || params.fillFirstStrategy;
+    const hasPendingFormFill =
+      hasMeaningfulForm &&
+      params.formProgress.filledControls < params.formProgress.totalControls;
+
+    if (hasPendingFormFill) return "filling";
+    return "ready_to_commit";
+  }
+
+  private getPlannerDirectiveForSubmitState(
+    submitState: SubmitLifecycleState,
+  ): string {
+    if (submitState === "filling") {
+      return "Do not FINISH. Avoid submit/create/save clicks until essential form fields are completed.";
+    }
+    if (submitState === "ready_to_commit") {
+      return "Prioritize exactly one commit action (submit/create/save), then stop mutating fields.";
+    }
+    if (submitState === "commit_in_flight") {
+      return "Avoid repeated commit clicks; wait for feedback and prepare FINISH.";
+    }
+    if (submitState === "committed") {
+      return "Prefer FINISH unless explicit error signals require corrective action.";
+    }
+    return "Return FINISH if no blocking errors are visible.";
   }
 
   private getFormProgress(markedContext: string): {
@@ -791,6 +1653,7 @@ export class AgentService implements IAgent {
     visualErrors: string[];
     executedSteps: TestStep[];
     allowAI: boolean;
+    telemetryCounters?: TelemetryLLMCounters;
   }): Promise<{
     verdict: "success" | "failure" | "inconclusive";
     confidence: number;
@@ -804,13 +1667,24 @@ export class AgentService implements IAgent {
     const afterVisualErrors = await this.domMarker.detectVisualErrors();
     const outcomeSignals = await this.domMarker.getOutcomeSignals();
     const visualSignals = await this.domMarker.getVisualSignals();
-    const visualDecision = visualSignals.length
-      ? await this.llmProvider.classifyVisualState({
-          goal: params.goal,
-          signals: visualSignals,
-          previousSteps: params.executedSteps,
-        })
-      : { verdict: "neutral" as const, confidence: 0.5, rationale: "No visual signals." };
+    let visualDecision: {
+      verdict: "error" | "success" | "warning" | "neutral";
+      confidence: number;
+      rationale: string;
+    } = { verdict: "neutral", confidence: 0.5, rationale: "No visual signals." };
+    if (visualSignals.length) {
+      const visualClassifyStart = this.nowMs();
+      visualDecision = await this.llmProvider.classifyVisualState({
+        goal: params.goal,
+        signals: visualSignals,
+        previousSteps: params.executedSteps,
+      });
+      const visualClassifyMs = this.elapsedMs(visualClassifyStart);
+      if (params.telemetryCounters) {
+        params.telemetryCounters.visualCalls += 1;
+        params.telemetryCounters.visualMs += visualClassifyMs;
+      }
+    }
 
     const newVisualErrors =
       visualDecision.verdict === "error"
@@ -883,7 +1757,8 @@ export class AgentService implements IAgent {
     };
     console.debug("[RacTest][Autopilot][AI Final Eval Payload]", finalEvalPayload);
 
-    return this.llmProvider.evaluateOutcome({
+    const outcomeStart = this.nowMs();
+    const outcome = await this.llmProvider.evaluateOutcome({
       goal: params.goal,
       beforeContext: params.beforeContext,
       afterContext,
@@ -895,6 +1770,12 @@ export class AgentService implements IAgent {
       },
       executedSteps: params.executedSteps,
     });
+    const outcomeMs = this.elapsedMs(outcomeStart);
+    if (params.telemetryCounters) {
+      params.telemetryCounters.outcomeCalls += 1;
+      params.telemetryCounters.outcomeMs += outcomeMs;
+    }
+    return outcome;
   }
 
   private extractElementMetaMap(
@@ -949,6 +1830,27 @@ export class AgentService implements IAgent {
     return null;
   }
 
+  private isRecoverablePreconditionError(error: string): boolean {
+    return (
+      /non-text element/i.test(error) ||
+      /non-select element/i.test(error) ||
+      /missing valid targetid/i.test(error) ||
+      /select action missing value/i.test(error)
+    );
+  }
+
+  private getCheckboxStateFromMeta(
+    elementMeta: { tag: string; raw: string } | undefined,
+  ): boolean | null {
+    if (!elementMeta) return null;
+    const raw = elementMeta.raw || "";
+    if (/aria-checked="true"/i.test(raw)) return true;
+    if (/aria-checked="false"/i.test(raw)) return false;
+    if (/\bchecked\b/i.test(raw)) return true;
+    if (/\bunchecked\b/i.test(raw)) return false;
+    return null;
+  }
+
   private isCriticalCommitAction(
     step: TestStep,
     elementMetaMap: Map<number, { tag: string; raw: string }>,
@@ -959,6 +1861,45 @@ export class AgentService implements IAgent {
     const commitPattern =
       /(submit|save|guardar|continuar|continue|enviar|finish|finalizar|create|crear|checkout|confirm)/i;
     return commitPattern.test(meta.raw);
+  }
+
+  private hasPendingCriticalCommitAction(
+    elementMetaMap: Map<number, { tag: string; raw: string }>,
+  ): boolean {
+    for (const meta of elementMetaMap.values()) {
+      const tag = meta.tag.toLowerCase();
+      if (tag !== "button" && tag !== "input" && tag !== "a") continue;
+      if (
+        /(submit|save|guardar|continuar|continue|enviar|finish|finalizar|create account|crear cuenta|create|crear|checkout|confirm)/i.test(
+          meta.raw,
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private findCriticalCommitTargetId(
+    elementMetaMap: Map<number, { tag: string; raw: string }>,
+  ): number | null {
+    const strongPattern =
+      /(create account|crear cuenta|submit|enviar|save|guardar|finish|finalizar|checkout|confirm)/i;
+    const weakPattern = /(create|crear|continue|continuar|register|signup|sign up)/i;
+
+    for (const [id, meta] of elementMetaMap.entries()) {
+      const tag = meta.tag.toLowerCase();
+      if (tag !== "button" && tag !== "input" && tag !== "a") continue;
+      if (strongPattern.test(meta.raw)) return id;
+    }
+
+    for (const [id, meta] of elementMetaMap.entries()) {
+      const tag = meta.tag.toLowerCase();
+      if (tag !== "button" && tag !== "input" && tag !== "a") continue;
+      if (weakPattern.test(meta.raw)) return id;
+    }
+
+    return null;
   }
 
   private resolveStepData(
@@ -1055,7 +1996,7 @@ export class AgentService implements IAgent {
     }
   }
 
-  private shouldReplan(
+  private getReplanReason(
     isDomUnchanged: boolean,
     previousContextLength: number,
     currentContextLength: number,
@@ -1063,27 +2004,94 @@ export class AgentService implements IAgent {
     currentContextModalFlag: boolean,
     nextPlannedStep: TestStep | undefined,
     currentElementMetaMap: Map<number, { tag: string; raw: string }>,
-  ): boolean {
-    if (!nextPlannedStep) return true;
+  ): string | null {
+    if (!nextPlannedStep) return "missing_next_step";
 
     if (
       nextPlannedStep.targetId &&
       !currentElementMetaMap.has(nextPlannedStep.targetId)
     ) {
-      return true;
+      return "target_not_in_dom";
     }
 
-    if (previousContextLength <= 0) return false;
+    if (previousContextLength <= 0) return null;
 
     const lengthDeltaRatio =
       Math.abs(currentContextLength - previousContextLength) /
       Math.max(previousContextLength, 1);
 
-    if (!isDomUnchanged && lengthDeltaRatio > 0.28) return true;
+    if (!isDomUnchanged && lengthDeltaRatio > 0.28) {
+      return "context_delta_ratio";
+    }
 
-    if (previousContextModalFlag !== currentContextModalFlag) return true;
+    if (previousContextModalFlag !== currentContextModalFlag) {
+      return "modal_state_changed";
+    }
 
+    return null;
+  }
+
+  private shouldSuppressReplan(
+    reason: string,
+    fillFirstStrategy: boolean,
+    hasSubmittedCriticalAction: boolean,
+    lastOutcome: "unknown" | "progress" | "no_effect" | "error_detected",
+  ): boolean {
+    if (reason !== "context_delta_ratio") return false;
+    if (fillFirstStrategy && !hasSubmittedCriticalAction) return true;
+    if (lastOutcome === "progress") return true;
     return false;
+  }
+
+  private getReplanSeverity(reason: string): "soft" | "hard" {
+    if (reason === "target_not_in_dom" || reason === "context_delta_ratio") {
+      return "soft";
+    }
+    return "hard";
+  }
+
+  private getReplanBudget(
+    reason: string,
+    mode: "strict_fail_fast" | "balanced",
+  ): number {
+    const strictBudget: Record<string, number> = {
+      empty_plan: 1,
+      plan_exhausted: 14,
+      missing_next_step: 2,
+      target_not_in_dom: 6,
+      context_delta_ratio: 8,
+      modal_state_changed: 2,
+      finish_without_commit: 3,
+      finish_before_form_complete: 3,
+      precondition_mismatch: 3,
+    };
+    const balancedBudget: Record<string, number> = {
+      empty_plan: 2,
+      plan_exhausted: 20,
+      missing_next_step: 4,
+      target_not_in_dom: 10,
+      context_delta_ratio: 12,
+      modal_state_changed: 4,
+      finish_without_commit: 5,
+      finish_before_form_complete: 5,
+      precondition_mismatch: 5,
+    };
+    const table = mode === "balanced" ? balancedBudget : strictBudget;
+    return table[reason] ?? (mode === "balanced" ? 5 : 3);
+  }
+
+  private findNextExecutablePlanIndex(
+    steps: TestStep[],
+    startIndex: number,
+    currentElementMetaMap: Map<number, { tag: string; raw: string }>,
+  ): number | null {
+    const safeStart = Math.max(0, startIndex);
+    for (let i = safeStart; i < steps.length; i++) {
+      const step = steps[i];
+      if (step.action === "FINISH") return i;
+      if (step.targetId && currentElementMetaMap.has(step.targetId)) return i;
+    }
+    return null;
   }
 
   private hasModalSignals(markedContext: string): boolean {
@@ -1103,6 +2111,7 @@ export class AgentService implements IAgent {
       message?: string;
     }>,
     consoleLogs: ConsoleLogEntry[] = [],
+    telemetry?: AutopilotTelemetry,
   ) {
     try {
       const historyEntry: any = {
@@ -1130,6 +2139,7 @@ export class AgentService implements IAgent {
             ? [...report.errors.console, ...report.errors.visual].join("; ")
             : undefined,
         consoleLogs,
+        autopilotTelemetry: telemetry,
       };
 
       const { storageService } = await import("../../commons/lib/storage");

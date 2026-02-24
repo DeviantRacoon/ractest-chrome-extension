@@ -138,6 +138,59 @@ export interface StepExecutionResult {
   error?: string;
 }
 
+export interface AutopilotCycleTelemetry {
+  cycle: number;
+  startedAt: number;
+  durationMs: number;
+  adaptiveMode: "fast" | "normal" | "complex";
+  contextChars: number;
+  domUnchanged: boolean;
+  unchangedCycles: number;
+  waitMs: number;
+  markMs: number;
+  contextMs: number;
+  visualScanMs: number;
+  planMs: number;
+  actMs: number;
+  verifyMs: number;
+  replanned: boolean;
+  replanReason?: string;
+  plannedSteps: number;
+  plannedIndex: number;
+  stepAction?: string;
+  stepTargetId?: number;
+  outcome: "executed" | "finish" | "retry" | "failed" | "stopped" | "skipped";
+}
+
+export interface AutopilotTelemetrySummary {
+  schemaVersion: 1;
+  runStartedAt: number;
+  runEndedAt: number;
+  durationMs: number;
+  cycles: number;
+  stepsExecuted: number;
+  replans: number;
+  retries: number;
+  domUnchangedCycles: number;
+  llmPlanCalls: number;
+  llmPlanMsTotal: number;
+  llmVisualCalls: number;
+  llmVisualMsTotal: number;
+  llmOutcomeCalls: number;
+  llmOutcomeMsTotal: number;
+  observeMsTotal: number;
+  actMsTotal: number;
+  verifyMsTotal: number;
+  avgCycleMs: number;
+  maxCycleMs: number;
+  replanReasons: Record<string, number>;
+}
+
+export interface AutopilotTelemetry {
+  summary: AutopilotTelemetrySummary;
+  cycles: AutopilotCycleTelemetry[];
+}
+
 /**
  * Overall execution result for a recipe
  */
@@ -153,6 +206,7 @@ export interface RecipeExecutionResult {
   consoleLogs?: ConsoleLogEntry[];
   errorMessage?: string;
   failureSignal?: FailureSignal;
+  autopilotTelemetry?: AutopilotTelemetry;
 }
 
 /**
