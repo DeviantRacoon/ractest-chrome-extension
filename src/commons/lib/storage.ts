@@ -1,5 +1,6 @@
 // Storage Layer for RacTest Chrome Extension
 import type {
+  FlowFolder,
   RecipeExecutionResult,
   TestProfile,
   UserSettings,
@@ -180,6 +181,75 @@ class StorageService {
     }
 
     await this.storage.set({ [StorageKeys.PROFILES]: filteredProfiles });
+    return true;
+  }
+
+  // ─── Folder CRUD ─────────────────────────────────────────────────────────────
+
+  /**
+   * Get all folders
+   */
+  async getFolders(): Promise<FlowFolder[]> {
+    try {
+      const result = await this.storage.get(StorageKeys.FOLDERS);
+      return (result[StorageKeys.FOLDERS] as FlowFolder[]) || [];
+    } catch (error) {
+      console.error("Error getting folders:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Create a new folder
+   */
+  async saveFolder(
+    folder: Omit<FlowFolder, "id" | "createdAt" | "updatedAt">,
+  ): Promise<FlowFolder> {
+    const folders = await this.getFolders();
+    const newFolder: FlowFolder = {
+      ...folder,
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    folders.push(newFolder);
+    await this.storage.set({ [StorageKeys.FOLDERS]: folders });
+    return newFolder;
+  }
+
+  /**
+   * Update an existing folder
+   */
+  async updateFolder(
+    id: string,
+    updates: Partial<Omit<FlowFolder, "id" | "createdAt">>,
+  ): Promise<FlowFolder | null> {
+    const folders = await this.getFolders();
+    const index = folders.findIndex((f) => f.id === id);
+    if (index === -1) return null;
+    folders[index] = { ...folders[index], ...updates, updatedAt: Date.now() };
+    await this.storage.set({ [StorageKeys.FOLDERS]: folders });
+    return folders[index];
+  }
+
+  /**
+   * Delete a folder — flows inside are ungrouped (folderId cleared)
+   */
+  async deleteFolder(id: string): Promise<boolean> {
+    const folders = await this.getFolders();
+    const filtered = folders.filter((f) => f.id !== id);
+    if (filtered.length === folders.length) return false;
+
+    // Ungroup any profiles that belonged to this folder
+    const profiles = await this.getProfiles();
+    const updated = profiles.map((p) =>
+      p.folderId === id ? { ...p, folderId: undefined } : p,
+    );
+
+    await this.storage.set({
+      [StorageKeys.FOLDERS]: filtered,
+      [StorageKeys.PROFILES]: updated,
+    });
     return true;
   }
 

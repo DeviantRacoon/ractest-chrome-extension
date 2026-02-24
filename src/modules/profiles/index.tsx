@@ -1,7 +1,7 @@
-import { ArrowLeft, Globe, Layout, Link, Type } from "lucide-react";
+import { ArrowLeft, FolderOpen, Globe, Layout, Link, Type } from "lucide-react";
 import React from "react";
-import { useI18n } from "../../commons/i18n";
 import { Button, Input } from "../../commons/components/ui";
+import { useI18n } from "../../commons/i18n";
 import type { useProfileForm } from "./hooks/useProfileForm";
 
 type ProfileFormViewProps = ReturnType<typeof useProfileForm>;
@@ -13,6 +13,9 @@ export const ProfileFormView: React.FC<ProfileFormViewProps> = ({
   setName,
   url,
   setUrl,
+  folderId,
+  setFolderId,
+  folders,
   errors,
   isUrlHighlighted,
   handleGetCurrentUrl,
@@ -107,6 +110,28 @@ export const ProfileFormView: React.FC<ProfileFormViewProps> = ({
                       : ""
                   }`}
                 />
+
+                {/* Folder picker */}
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium text-text-secondary">
+                    <span className="flex items-center gap-1.5">
+                      <FolderOpen className="w-4 h-4" />
+                      {t("folders.noFolder")}
+                    </span>
+                  </label>
+                  <select
+                    value={folderId}
+                    onChange={(e) => setFolderId(e.target.value)}
+                    className="w-full h-10 px-3 rounded-lg bg-bg-card/50 border border-border-default/50 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary focus:border-accent-primary transition-colors appearance-none cursor-pointer"
+                  >
+                    <option value="">{t("folders.noFolder")}</option>
+                    {folders.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.icon} {f.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
