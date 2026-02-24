@@ -1,5 +1,7 @@
 import { GripVertical, Trash2 } from "lucide-react";
 import React from "react";
+import type { DraggableSyntheticListeners } from "@dnd-kit/core";
+import { useI18n } from "../i18n";
 import type { TestStep } from "../types";
 
 interface StepDividerProps {
@@ -8,7 +10,7 @@ interface StepDividerProps {
   onUpdate: (stepId: string, updates: Partial<TestStep>) => void;
   onDelete: (stepId: string) => void;
   isDragging?: boolean;
-  dragHandleListeners?: any;
+  dragHandleListeners?: DraggableSyntheticListeners;
 }
 
 export const StepDivider: React.FC<StepDividerProps> = ({
@@ -18,6 +20,7 @@ export const StepDivider: React.FC<StepDividerProps> = ({
   isDragging = false,
   dragHandleListeners,
 }) => {
+  const { t } = useI18n();
   return (
     <div
       className={`group relative flex items-center gap-3 py-3 px-2 rounded-lg transition-all duration-200 ${
@@ -43,7 +46,7 @@ export const StepDivider: React.FC<StepDividerProps> = ({
           type="text"
           value={step.value || ""} // We use 'value' to store the divider text
           onChange={(e) => onUpdate(step.id, { value: e.target.value })}
-          placeholder="Nombre de la Sección"
+          placeholder={t("stepEditor.divider.placeholder")}
           className="bg-transparent text-xs font-semibold text-text-secondary placeholder:text-text-muted/20 focus:outline-none focus:text-accent-primary text-center min-w-[120px] uppercase tracking-wider select-none"
         />
         <div className="h-px flex-1 bg-gradient-to-r from-border-default via-border-default to-transparent opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -53,7 +56,7 @@ export const StepDivider: React.FC<StepDividerProps> = ({
       <button
         onClick={() => onDelete(step.id)}
         className="p-1.5 text-text-muted/30 hover:text-status-error hover:bg-status-error/10 rounded-md transition-all duration-200 opacity-0 group-hover:opacity-100 transform scale-90 group-hover:scale-100"
-        title="Eliminar sección"
+        title={t("stepEditor.divider.delete")}
       >
         <Trash2 className="w-3.5 h-3.5" />
       </button>

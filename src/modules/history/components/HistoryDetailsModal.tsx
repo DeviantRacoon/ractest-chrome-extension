@@ -13,6 +13,7 @@ import React, { useState } from "react";
 import { useI18n } from "../../../commons/i18n";
 import { Modal } from "../../../commons/components/ui";
 import type { RecipeExecutionResult } from "../../../commons/types";
+import { AutopilotTelemetrySummary } from "./AutopilotTelemetrySummary";
 
 interface HistoryDetailsModalProps {
   isOpen: boolean;
@@ -92,6 +93,8 @@ export const HistoryDetailsModal: React.FC<HistoryDetailsModalProps> = ({
             )}
           </div>
         )}
+
+        <AutopilotTelemetrySummary result={result} compact />
 
         {/* Tabs */}
         <div className="flex border-b border-border-default/50">

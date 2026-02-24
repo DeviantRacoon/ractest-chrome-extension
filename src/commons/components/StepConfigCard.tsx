@@ -11,6 +11,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
+import type { DraggableSyntheticListeners } from "@dnd-kit/core";
+import { useI18n } from "../i18n";
 import type { ActionType, TestStep } from "../types";
 import { FakeDataSelector } from "./FakeDataSelector";
 import { Input, Select } from "./ui";
@@ -22,7 +24,7 @@ interface StepConfigCardProps {
   onDelete: (stepId: string) => void;
   onHighlight: (selector: string) => void;
   isDragging?: boolean;
-  dragHandleListeners?: any;
+  dragHandleListeners?: DraggableSyntheticListeners;
 }
 
 const ACTION_ICONS: Record<ActionType, React.ReactNode> = {
@@ -50,26 +52,22 @@ const ACTION_Colors: Record<ActionType, string> = {
 const ACTION_OPTIONS = [
   {
     value: "CLICK",
-    label: "Click",
     needsValue: false,
     icon: ACTION_ICONS.CLICK,
   },
-  { value: "TYPE", label: "Type", needsValue: true, icon: ACTION_ICONS.TYPE },
+  { value: "TYPE", needsValue: true, icon: ACTION_ICONS.TYPE },
   {
     value: "SELECT",
-    label: "Select",
     needsValue: true,
     icon: ACTION_ICONS.SELECT,
   },
   {
     value: "CHECK",
-    label: "Check",
     needsValue: false,
     icon: ACTION_ICONS.CHECK,
   },
   {
     value: "UNCHECK",
-    label: "Uncheck",
     needsValue: false,
     icon: ACTION_ICONS.UNCHECK,
   },
@@ -84,6 +82,7 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
   isDragging = false,
   dragHandleListeners,
 }) => {
+  const { t } = useI18n();
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Cast step.action to string to match Select value type, then cast back when updating
@@ -93,6 +92,26 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
   const needsValue = selectedAction?.needsValue ?? false;
   const actionColorClass =
     ACTION_Colors[step.action] || "text-text-primary bg-bg-secondary";
+  const getActionLabel = (action: string) => {
+    switch (action) {
+      case "CLICK":
+        return t("stepEditor.action.CLICK");
+      case "TYPE":
+        return t("stepEditor.action.TYPE");
+      case "SELECT":
+        return t("stepEditor.action.SELECT");
+      case "CHECK":
+        return t("stepEditor.action.CHECK");
+      case "UNCHECK":
+        return t("stepEditor.action.UNCHECK");
+      default:
+        return action;
+    }
+  };
+  const actionOptionsWithLabels = ACTION_OPTIONS.map((option) => ({
+    ...option,
+    label: getActionLabel(option.value),
+  }));
 
   const handleActionChange = (value: string) => {
     const newAction = value as ActionType;
@@ -143,7 +162,7 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
               {ACTION_ICONS[step.action]}
             </span>
             <span className="font-semibold text-sm text-text-primary">
-              {selectedAction?.label}
+              {selectedAction ? getActionLabel(selectedAction.value) : ""}
             </span>
             {step.value && needsValue && (
               <span className="text-xs text-text-secondary bg-bg-secondary px-1.5 py-0.5 rounded border border-border-default truncate max-w-[100px]">
@@ -169,7 +188,7 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
               onHighlight(step.selector);
             }}
             className="p-1.5 text-text-muted hover:text-accent-primary hover:bg-accent-primary/10 rounded-md transition-colors"
-            title="Resaltar en página"
+            title={t("stepEditor.stepCard.highlight")}
           >
             <Eye className="w-4 h-4" />
           </button>
@@ -179,7 +198,7 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
               onDelete(step.id);
             }}
             className="p-1.5 text-text-muted hover:text-status-error hover:bg-status-error/10 rounded-md transition-colors"
-            title="Eliminar paso"
+            title={t("stepEditor.stepCard.delete")}
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -201,16 +220,16 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
 
           <div className="grid grid-cols-1 gap-4">
             <Select
-              label="Tipo de Acción"
+              label={t("stepEditor.stepCard.actionType")}
               value={step.action}
               onChange={handleActionChange}
-              options={ACTION_OPTIONS}
+              options={actionOptionsWithLabels}
               fullWidth
             />
 
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Selector
+                {t("stepEditor.stepCard.selector")}
               </label>
               <div className="px-3 py-2 bg-bg-main/50 border border-border-default/50 rounded-lg font-mono text-xs text-accent-primary break-all shadow-inner">
                 {step.selector}
@@ -220,14 +239,18 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
             {needsValue && (
               <div className="space-y-2">
                 <Input
-                  label={`Valor ${step.action === "TYPE" ? "(texto)" : "(opción)"}`}
+                  label={
+                    step.action === "TYPE"
+                      ? t("stepEditor.stepCard.valueText")
+                      : t("stepEditor.stepCard.valueOption")
+                  }
                   type="text"
                   value={step.value || ""}
                   onChange={handleValueChange}
                   placeholder={
                     step.action === "TYPE"
-                      ? "Ej: user@example.com"
-                      : "Ej: value-1"
+                      ? t("stepEditor.stepCard.valuePlaceholderText")
+                      : t("stepEditor.stepCard.valuePlaceholderOption")
                   }
                   fullWidth
                   disabled={step.useFakeData}
@@ -263,7 +286,7 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
                         />
                       </div>
                       <span className="text-xs text-text-secondary group-hover/toggle:text-text-primary transition-colors select-none">
-                        Texto único (append UUID)
+                        {t("stepEditor.stepCard.uniqueText")}
                       </span>
                     </div>
 
@@ -290,7 +313,7 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
                         />
                       </div>
                       <span className="text-xs text-text-secondary group-hover/toggle:text-text-primary transition-colors select-none">
-                        Usar Dato Aleatorio (Fake Data)
+                        {t("stepEditor.stepCard.useFakeData")}
                       </span>
                     </div>
 
@@ -298,7 +321,7 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
                     {step.useFakeData && (
                       <div className="pl-2 border-l-2 border-accent-primary/20">
                         <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                          Tipo de Dato
+                          {t("stepEditor.stepCard.fakeDataType")}
                         </label>
                         <FakeDataSelector
                           value={step.fakeDataType}
@@ -314,7 +337,7 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
             )}
 
             <Input
-              label="Delay (ms)"
+              label={t("stepEditor.stepCard.delay")}
               type="number"
               value={step.delay}
               onChange={handleDelayChange}
