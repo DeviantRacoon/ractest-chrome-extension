@@ -1,7 +1,8 @@
-import { ArrowLeft, Globe, Layout, Link, Type } from "lucide-react";
+import { ArrowLeft, FolderOpen, Globe, Layout, Link, Type } from "lucide-react";
 import React from "react";
+import { FOLDER_ICON_MAP } from "../../commons/components/folderIcons";
+import { Button, Input, Select } from "../../commons/components/ui";
 import { useI18n } from "../../commons/i18n";
-import { Button, Input } from "../../commons/components/ui";
 import type { useProfileForm } from "./hooks/useProfileForm";
 
 type ProfileFormViewProps = ReturnType<typeof useProfileForm>;
@@ -13,6 +14,9 @@ export const ProfileFormView: React.FC<ProfileFormViewProps> = ({
   setName,
   url,
   setUrl,
+  folderId,
+  setFolderId,
+  folders,
   errors,
   isUrlHighlighted,
   handleGetCurrentUrl,
@@ -107,6 +111,32 @@ export const ProfileFormView: React.FC<ProfileFormViewProps> = ({
                       : ""
                   }`}
                 />
+
+                {/* Folder picker */}
+                <div className="space-y-1.5">
+                  <Select
+                    label={t("folders.noFolder")}
+                    leftIcon={<FolderOpen className="w-4 h-4" />}
+                    value={folderId}
+                    onChange={setFolderId}
+                    options={[
+                      { value: "", label: t("folders.noFolder") },
+                      ...folders.map((f) => {
+                        const IconComponent =
+                          FOLDER_ICON_MAP[f.icon ?? "folder"];
+                        return {
+                          value: f.id,
+                          label: f.name,
+                          icon: IconComponent ? (
+                            <IconComponent className="w-4 h-4" />
+                          ) : undefined,
+                        };
+                      }),
+                    ]}
+                    className="bg-bg-card/50 border-border-default/50"
+                    fullWidth
+                  />
+                </div>
               </div>
             </div>
 

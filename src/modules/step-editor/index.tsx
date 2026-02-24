@@ -15,11 +15,11 @@ import {
   Sparkles,
 } from "lucide-react";
 import React from "react";
-import { useI18n } from "../../commons/i18n";
 import { AIPromptModal } from "../../commons/components/AIPromptModal";
 import { StepConfigCard } from "../../commons/components/StepConfigCard";
 import { StepDivider } from "../../commons/components/StepDivider";
 import { Button } from "../../commons/components/ui";
+import { useI18n } from "../../commons/i18n";
 import type { TestStep } from "../../commons/types";
 import type { useStepEditor } from "./hooks/useStepEditor";
 
@@ -115,7 +115,9 @@ export const StepEditorView: React.FC<StepEditorViewProps> = ({
         <h3 className="text-lg font-semibold text-text-primary mb-2">
           {t("stepEditor.notFoundTitle")}
         </h3>
-        <Button onClick={() => navigate("/")}>{t("stepEditor.backHome")}</Button>
+        <Button onClick={() => navigate("/")}>
+          {t("stepEditor.backHome")}
+        </Button>
       </div>
     );
   }
@@ -208,10 +210,9 @@ export const StepEditorView: React.FC<StepEditorViewProps> = ({
                 ? t("stepEditor.aiNeedApiKey")
                 : t("stepEditor.aiGenerate")
             }
-            className="whitespace-nowrap text-xs border border-border-default hover:border-accent-primary/50 text-accent-primary px-4 shadow-sm bg-accent-primary/5 hover:bg-accent-primary/10 disabled:opacity-50 disabled:cursor-not-allowed disabled:grayscale"
+            className="text-xs border border-border-default hover:border-accent-primary/50 text-accent-primary px-2 shadow-sm bg-accent-primary/5 hover:bg-accent-primary/10 disabled:opacity-50 disabled:cursor-not-allowed disabled:grayscale"
           >
-            <Sparkles className="w-3.5 h-3.5 mr-2" />
-            {t("stepEditor.aiMagic")}
+            <Sparkles className="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>
