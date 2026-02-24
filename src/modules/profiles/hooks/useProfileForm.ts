@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useI18n } from "../../../commons/i18n";
 import storageService from "../../../commons/lib/storage";
-import type { FlowFolder } from "../../../commons/types";
 
 export const useProfileForm = () => {
   const navigate = useNavigate();
@@ -13,18 +12,8 @@ export const useProfileForm = () => {
   const { t } = useI18n();
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
-  const [folderId, setFolderId] = useState<string>("");
-  const [folders, setFolders] = useState<FlowFolder[]>([]);
   const [errors, setErrors] = useState<{ name?: string; url?: string }>({});
   const [isUrlHighlighted, setIsUrlHighlighted] = useState(false);
-
-  // Load folders for the dropdown
-  useEffect(() => {
-    storageService
-      .getFolders()
-      .then(setFolders)
-      .catch((e) => console.error("Error loading folders:", e));
-  }, []);
 
   // Load profile if editing
   useEffect(() => {
@@ -64,7 +53,6 @@ export const useProfileForm = () => {
       if (profile) {
         setName(profile.name);
         setUrl(profile.url);
-        setFolderId(profile.folderId ?? "");
       }
     } catch (error) {
       console.error("Error loading profile:", error);
@@ -117,13 +105,11 @@ export const useProfileForm = () => {
 
     setLoading(true);
     try {
-      const folderIdValue = folderId || undefined;
       if (profileId) {
         // Update existing
         await storageService.updateProfile(profileId, {
           name: name.trim(),
           url: url.trim(),
-          folderId: folderIdValue,
         });
         navigate("/");
       } else {
@@ -131,7 +117,6 @@ export const useProfileForm = () => {
         const newProfile = await storageService.saveProfile({
           name: name.trim(),
           url: url.trim(),
-          folderId: folderIdValue,
           steps: [],
         });
         navigate(`/profile/${newProfile.id}/steps`);
@@ -150,9 +135,6 @@ export const useProfileForm = () => {
     setName,
     url,
     setUrl,
-    folderId,
-    setFolderId,
-    folders,
     errors,
     isUrlHighlighted,
     handleGetCurrentUrl,

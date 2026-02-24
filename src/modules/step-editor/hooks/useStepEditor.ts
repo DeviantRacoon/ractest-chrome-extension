@@ -9,16 +9,16 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useToast } from "../../../commons/components/ui";
 import { useI18n } from "../../../commons/i18n";
+import { useToast } from "../../../commons/components/ui";
 import { inspectorService } from "../../../commons/lib/inspectorService";
 import storageService from "../../../commons/lib/storage";
+import { agentService } from "../../../core/container";
 import type {
   SelectorInfo,
   TestProfile,
   TestStep,
 } from "../../../commons/types";
-import { agentService } from "../../../core/container";
 import { getBestSelector } from "../../inspector/utils/selector";
 
 export const useStepEditor = () => {
@@ -27,7 +27,6 @@ export const useStepEditor = () => {
 
   const [profile, setProfile] = useState<TestProfile | null>(null);
   const [steps, setSteps] = useState<TestStep[]>([]);
-  const [availableRecipes, setAvailableRecipes] = useState<TestProfile[]>([]);
   const [isInspectorActive, setIsInspectorActive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -76,13 +75,11 @@ export const useStepEditor = () => {
     }
 
     try {
-      const allProfiles = await storageService.getProfiles();
-      const loadedProfile = allProfiles.find((p) => p.id === id);
+      const loadedProfile = await storageService.getProfile(id);
       if (loadedProfile) {
         setProfile(loadedProfile);
         setSteps(loadedProfile.steps || []);
       }
-      setAvailableRecipes(allProfiles.filter((p) => p.id !== id));
     } catch (err) {
       console.error("Error loading profile:", err);
       error(t("stepEditor.toast.loadError"));
@@ -314,18 +311,6 @@ export const useStepEditor = () => {
     setSteps((prev) => [...prev, newStep]);
   };
 
-  const handleAddRecipe = () => {
-    const newStep: TestStep = {
-      id: crypto.randomUUID(),
-      action: "RECIPE",
-      selector: "body", // Dummy selector
-      value: "",
-      delay: 0,
-      order: steps.length + 1,
-    };
-    setSteps((prev) => [...prev, newStep]);
-  };
-
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
 
@@ -451,7 +436,6 @@ export const useStepEditor = () => {
     handleDragEnd,
     handleSave,
     handleAddDivider,
-    handleAddRecipe,
     navigate,
     setSteps, // Export if needed for advanced cases, but handlers should cover it
     aiModalOpen,
@@ -469,6 +453,5 @@ export const useStepEditor = () => {
     handleAgentStop,
     clearAgentLogs,
     hasApiKey,
-    availableRecipes,
   };
 };
