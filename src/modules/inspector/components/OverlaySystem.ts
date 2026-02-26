@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import React from "react";
 import { createRoot, type Root } from "react-dom/client";
+import Input from "../../../commons/components/ui/Input";
 import type { SelectOption } from "../../../commons/components/ui/Select";
 import { Select } from "../../../commons/components/ui/Select";
 import overlayStyles from "./OverlaySystem.css?inline";
@@ -39,6 +40,9 @@ export class OverlaySystem {
   private captureMenu: HTMLDivElement | null = null;
   private actionSelectRoot: Root | null = null;
   private fakeTypeSelectRoot: Root | null = null;
+  private valueInputRoot: Root | null = null;
+  private delayInputRoot: Root | null = null;
+  private repositionMenuListener: (() => void) | null = null;
   private isActive = false;
   private highlightColor = "#10B981"; // Default emerald-500
   private language: AppLanguage = "en";
@@ -172,8 +176,16 @@ export class OverlaySystem {
   public hideCaptureMenu(): void {
     this.actionSelectRoot?.unmount();
     this.fakeTypeSelectRoot?.unmount();
+    this.valueInputRoot?.unmount();
+    this.delayInputRoot?.unmount();
     this.actionSelectRoot = null;
     this.fakeTypeSelectRoot = null;
+    this.valueInputRoot = null;
+    this.delayInputRoot = null;
+    if (this.repositionMenuListener) {
+      window.removeEventListener("resize", this.repositionMenuListener);
+      this.repositionMenuListener = null;
+    }
     this.captureMenu?.remove();
     this.captureMenu = null;
   }
@@ -258,7 +270,7 @@ export class OverlaySystem {
       <div id="ractest-capture-action-react" class="ractest-react-select"></div>
       <div id="ractest-capture-value-wrap">
         <label class="ractest-capture-menu-label" id="ractest-capture-value-label" for="ractest-capture-value">${copy.value}</label>
-        <input id="ractest-capture-value" class="ractest-capture-menu-field" type="text" />
+        <div id="ractest-capture-value-react"></div>
       </div>
       <div id="ractest-capture-type-options" class="ractest-toggle-group">
         <label class="ractest-switch">
@@ -277,7 +289,7 @@ export class OverlaySystem {
         <div id="ractest-capture-fake-type-react" class="ractest-react-select"></div>
       </div>
       <label class="ractest-capture-menu-label" for="ractest-capture-delay">${copy.delay}</label>
-      <input id="ractest-capture-delay" class="ractest-capture-menu-field" type="number" min="0" step="100" />
+      <div id="ractest-capture-delay-react"></div>
       <div id="ractest-capture-error" class="ractest-capture-menu-error"></div>
       <div class="ractest-capture-menu-actions">
         <button type="button" id="ractest-capture-cancel" class="ractest-capture-btn ractest-capture-btn-secondary">
@@ -294,18 +306,40 @@ export class OverlaySystem {
     document.body.appendChild(menu);
     this.captureMenu = menu;
 
+    const repositionMenu = () => {
+      const padding = 12;
+      menu.style.maxHeight = `${Math.max(280, window.innerHeight - padding * 2)}px`;
+      menu.style.overflowY = "auto";
+
+      const menuRect = menu.getBoundingClientRect();
+      const left = Math.min(
+        Math.max(params.x + 12, padding),
+        window.innerWidth - menuRect.width - padding,
+      );
+      const top = Math.min(
+        Math.max(params.y + 12, padding),
+        window.innerHeight - menuRect.height - padding,
+      );
+
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+    };
+
+    this.repositionMenuListener = repositionMenu;
+    window.addEventListener("resize", repositionMenu);
+
     const actionSelectMount = menu.querySelector(
       "#ractest-capture-action-react",
     ) as HTMLDivElement | null;
     const valueWrap = menu.querySelector(
       "#ractest-capture-value-wrap",
     ) as HTMLDivElement | null;
+    const valueInputMount = menu.querySelector(
+      "#ractest-capture-value-react",
+    ) as HTMLDivElement | null;
     const valueLabel = menu.querySelector(
       "#ractest-capture-value-label",
     ) as HTMLLabelElement | null;
-    const valueInput = menu.querySelector(
-      "#ractest-capture-value",
-    ) as HTMLInputElement | null;
     const typeOptions = menu.querySelector(
       "#ractest-capture-type-options",
     ) as HTMLDivElement | null;
@@ -321,9 +355,9 @@ export class OverlaySystem {
     const fakeTypeSelectMount = menu.querySelector(
       "#ractest-capture-fake-type-react",
     ) as HTMLDivElement | null;
-    const delayInput = menu.querySelector(
-      "#ractest-capture-delay",
-    ) as HTMLInputElement | null;
+    const delayInputMount = menu.querySelector(
+      "#ractest-capture-delay-react",
+    ) as HTMLDivElement | null;
     const errorText = menu.querySelector(
       "#ractest-capture-error",
     ) as HTMLDivElement | null;
@@ -337,14 +371,14 @@ export class OverlaySystem {
     if (
       !actionSelectMount ||
       !valueWrap ||
+      !valueInputMount ||
       !valueLabel ||
-      !valueInput ||
       !typeOptions ||
       !uniqueTextCheckbox ||
       !fakeDataCheckbox ||
       !fakeTypeWrap ||
       !fakeTypeSelectMount ||
-      !delayInput ||
+      !delayInputMount ||
       !errorText ||
       !saveButton ||
       !cancelButton
@@ -389,6 +423,8 @@ export class OverlaySystem {
 
     this.actionSelectRoot = createRoot(actionSelectMount);
     this.fakeTypeSelectRoot = createRoot(fakeTypeSelectMount);
+    this.valueInputRoot = createRoot(valueInputMount);
+    this.delayInputRoot = createRoot(delayInputMount);
 
     const renderActionSelect = () => {
       this.actionSelectRoot?.render(
@@ -417,6 +453,30 @@ export class OverlaySystem {
       );
     };
 
+    const renderValueInput = () => {
+      this.valueInputRoot?.render(
+        React.createElement(Input, {
+          id: "ractest-capture-value",
+          type: "text",
+          defaultValue: params.defaultValue || "",
+          fullWidth: true,
+        }),
+      );
+    };
+
+    const renderDelayInput = () => {
+      this.delayInputRoot?.render(
+        React.createElement(Input, {
+          id: "ractest-capture-delay",
+          type: "number",
+          defaultValue: String(params.defaultDelay),
+          min: 0,
+          step: 100,
+          fullWidth: true,
+        }),
+      );
+    };
+
     const setSelectedAction = (action: CaptureAction) => {
       selectedAction = action;
       renderActionSelect();
@@ -424,9 +484,8 @@ export class OverlaySystem {
 
     setSelectedAction(params.defaultAction);
     renderFakeTypeSelect();
-
-    valueInput.value = params.defaultValue || "";
-    delayInput.value = String(params.defaultDelay);
+    renderValueInput();
+    renderDelayInput();
     selectedFakeDataType = "name";
 
     const updateVisibility = () => {
@@ -439,8 +498,14 @@ export class OverlaySystem {
       typeOptions.style.display = isType ? "grid" : "none";
       fakeTypeWrap.style.display = useFakeData ? "block" : "none";
       valueLabel.textContent = isSelect ? copy.optionValue : copy.value;
-      valueInput.disabled = useFakeData;
+      const valueInput = menu.querySelector(
+        "#ractest-capture-value",
+      ) as HTMLInputElement | null;
+      if (valueInput) {
+        valueInput.disabled = useFakeData;
+      }
       errorText.textContent = "";
+      requestAnimationFrame(repositionMenu);
     };
 
     updateVisibility();
@@ -458,12 +523,18 @@ export class OverlaySystem {
       const isType = action === "TYPE";
       const needsValue = isType || action === "SELECT";
       const useFakeData = isType && fakeDataCheckbox.checked;
-      const value = valueInput.value.trim();
-      const delay = Math.max(0, parseInt(delayInput.value || "0", 10) || 0);
+      const valueInput = menu.querySelector(
+        "#ractest-capture-value",
+      ) as HTMLInputElement | null;
+      const delayInput = menu.querySelector(
+        "#ractest-capture-delay",
+      ) as HTMLInputElement | null;
+      const value = valueInput?.value.trim() || "";
+      const delay = Math.max(0, parseInt(delayInput?.value || "0", 10) || 0);
 
       if (needsValue && !useFakeData && !value) {
         errorText.textContent = copy.requiredValueError;
-        valueInput.focus();
+        valueInput?.focus();
         return;
       }
 
@@ -490,19 +561,7 @@ export class OverlaySystem {
       }
     });
 
-    const menuRect = menu.getBoundingClientRect();
-    const padding = 12;
-    const left = Math.min(
-      Math.max(params.x + 12, padding),
-      window.innerWidth - menuRect.width - padding,
-    );
-    const top = Math.min(
-      Math.max(params.y + 12, padding),
-      window.innerHeight - menuRect.height - padding,
-    );
-
-    menu.style.left = `${left}px`;
-    menu.style.top = `${top}px`;
+    requestAnimationFrame(repositionMenu);
   }
 
   private cancelIcon(): string {

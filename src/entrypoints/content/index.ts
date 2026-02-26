@@ -312,3 +312,28 @@ window.addEventListener("message", (event) => {
     });
   }
 });
+
+const isEditableTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName.toLowerCase();
+  return tag === "input" || tag === "textarea" || tag === "select";
+};
+
+// Global shortcut: Alt + Shift + C toggles inspector capture mode
+document.addEventListener("keydown", (event) => {
+  if (event.repeat || isEditableTarget(event.target)) return;
+  if (!(event.altKey && event.shiftKey && event.key.toLowerCase() === "c")) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (inspector.isInspectorActive()) {
+    inspector.deactivate();
+    return;
+  }
+
+  inspector.activate("keyboard-shortcut");
+});

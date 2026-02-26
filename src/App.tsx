@@ -13,6 +13,7 @@ const StepEditorPage = lazy(() => import("./pages/StepEditorPage"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
 const HistoryDetailsPage = lazy(() => import("./pages/HistoryDetailsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const AboutPrivacyPage = lazy(() => import("./pages/AboutPrivacyPage"));
 const TestInspectorPage = lazy(() => import("./pages/TestInspectorPage"));
 const AutopilotPage = lazy(() => import("./pages/AutopilotPage"));
 
@@ -49,6 +50,7 @@ function App() {
               <Route path="history" element={<HistoryPage />} />
               <Route path="history/:id" element={<HistoryDetailsPage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="settings/about" element={<AboutPrivacyPage />} />
               <Route path="test-inspector" element={<TestInspectorPage />} />
               <Route path="autopilot" element={<AutopilotPage />} />
             </Route>

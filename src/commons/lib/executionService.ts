@@ -253,39 +253,44 @@ export class ExecutionService {
       }
 
       // Execution Complete
-      const finalOutcome = await this.evaluateFinalOutcome(
-        recipe,
-        results,
-        this.currentTabId,
-        settings.finalValidationDelay ?? 3500,
-      );
-      if (finalOutcome.verdict === "failure") {
-        const errorMessage = `Fallo detectado automáticamente (FINAL_OUTCOME): ${finalOutcome.rationale}`;
-        const failureStepResult: StepExecutionResult = {
-          stepId: `ai-final-${Date.now()}`,
-          status: "error",
-          message: errorMessage,
-          error: errorMessage,
-          timestamp: Date.now(),
-        };
-        results.push(failureStepResult);
-        this.onStepResultCallback?.(failureStepResult);
-        await this.saveHistory(recipe, "failed", results, errorMessage, {
-          subtype: "FORM_VALIDATION",
-          message: finalOutcome.rationale,
-          timestamp: Date.now(),
-          payload: {
-            score: finalOutcome.score,
-            signals: finalOutcome.signals,
-          },
-        });
-        this.onFailedCallback?.(errorMessage, results);
-        this.sendNotification(
-          "Error en el flujo",
-          "La validación final detectó que el formulario terminó en estado de fallo.",
+      const shouldRunFinalValidation =
+        recipe.enableFinalValidation !== false &&
+        this.hasFinalValidationTrigger(recipe);
+      if (shouldRunFinalValidation) {
+        const finalOutcome = await this.evaluateFinalOutcome(
+          recipe,
+          results,
+          this.currentTabId,
+          settings.finalValidationDelay ?? 3500,
         );
-        this.resetExecutionState();
-        return;
+        if (finalOutcome.verdict === "failure") {
+          const errorMessage = `Fallo detectado automáticamente (FINAL_OUTCOME): ${finalOutcome.rationale}`;
+          const failureStepResult: StepExecutionResult = {
+            stepId: `ai-final-${Date.now()}`,
+            status: "error",
+            message: errorMessage,
+            error: errorMessage,
+            timestamp: Date.now(),
+          };
+          results.push(failureStepResult);
+          this.onStepResultCallback?.(failureStepResult);
+          await this.saveHistory(recipe, "failed", results, errorMessage, {
+            subtype: "FORM_VALIDATION",
+            message: finalOutcome.rationale,
+            timestamp: Date.now(),
+            payload: {
+              score: finalOutcome.score,
+              signals: finalOutcome.signals,
+            },
+          });
+          this.onFailedCallback?.(errorMessage, results);
+          this.sendNotification(
+            "Error en el flujo",
+            "La validación final detectó que el formulario terminó en estado de fallo.",
+          );
+          this.resetExecutionState();
+          return;
+        }
       }
 
       await this.saveHistory(recipe, "completed", results);
@@ -321,7 +326,7 @@ export class ExecutionService {
     failureSignal?: FailureSignal;
     cancelled?: boolean;
   }> {
-    for (const step of stepsToRun) {
+    for (const [i, step] of stepsToRun.entries()) {
       if (!this.currentTabId) {
         const result: StepExecutionResult = {
           stepId: step.id,
@@ -484,7 +489,12 @@ export class ExecutionService {
 
         if (
           this.currentTabId &&
-          this.isCriticalCommitStep(step, result.message)
+          this.shouldRunDeterministicPostSubmitValidation(
+            step,
+            result.message,
+            i,
+            stepsToRun,
+          )
         ) {
           const submitWindow = await this.collectTemporalEvidenceWindow(
             this.currentTabId,
@@ -940,8 +950,37 @@ export class ExecutionService {
   private isCriticalCommitStep(step: TestStep, message?: string): boolean {
     if (step.action !== "CLICK") return false;
     const text = `${step.selector || ""} ${message || ""}`.toLowerCase();
-    return /(submit|save|create|register|signup|sign up|enviar|guardar|continuar|confirm)/i.test(
+    return /(submit|save|create|register|signup|sign up|enviar|guardar|confirm|finalizar|finish)/i.test(
       text,
+    );
+  }
+
+  private isLastRelevantStep(index: number, steps: TestStep[]): boolean {
+    for (let next = index + 1; next < steps.length; next++) {
+      if (steps[next].action !== "DIVIDER") {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private shouldRunDeterministicPostSubmitValidation(
+    step: TestStep,
+    message: string | undefined,
+    stepIndex: number,
+    stepsToRun: TestStep[],
+  ): boolean {
+    return (
+      this.isCriticalCommitStep(step, message) &&
+      this.isLastRelevantStep(stepIndex, stepsToRun)
+    );
+  }
+
+  private hasFinalValidationTrigger(recipe: TestProfile): boolean {
+    return recipe.steps.some(
+      (step) =>
+        step.action === "FINISH" ||
+        this.isCriticalCommitStep(step, step.value || ""),
     );
   }
 

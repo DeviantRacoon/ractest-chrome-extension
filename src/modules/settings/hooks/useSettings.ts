@@ -11,7 +11,6 @@ export const useSettings = () => {
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [clearDataModalOpen, setClearDataModalOpen] = useState(false);
-  const [aboutModalOpen, setAboutModalOpen] = useState(false);
 
   const { success, error } = useToast();
   const { t } = useI18n();
@@ -202,7 +201,5 @@ export const useSettings = () => {
     handleImportData,
     handleClearAllDataRequest,
     handleConfirmClearAllData,
-    aboutModalOpen,
-    setAboutModalOpen,
   };
 };

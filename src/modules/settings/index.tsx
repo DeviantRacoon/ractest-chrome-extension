@@ -11,6 +11,7 @@ import {
   Upload,
 } from "lucide-react";
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Button,
   Card,
@@ -20,13 +21,13 @@ import {
 } from "../../commons/components/ui";
 import { useI18n } from "../../commons/i18n";
 import type { AppLanguagePreference } from "../../commons/types";
-import { AboutPrivacyModal } from "./components/AboutPrivacyModal";
 import type { useSettings } from "./hooks/useSettings";
 
 type SettingsViewProps = ReturnType<typeof useSettings>;
 
 export const SettingsView: React.FC<SettingsViewProps> = (settingsProps) => {
   const { t, systemLanguage, setLanguage } = useI18n();
+  const navigate = useNavigate();
   const {
     settings,
     loading,
@@ -522,14 +523,9 @@ export const SettingsView: React.FC<SettingsViewProps> = (settingsProps) => {
         variant="danger"
       />
 
-      <AboutPrivacyModal
-        isOpen={settingsProps.aboutModalOpen}
-        onClose={() => settingsProps.setAboutModalOpen(false)}
-      />
-
       <div className="absolute bottom-4 right-4 animate-fade-in">
         <button
-          onClick={() => settingsProps.setAboutModalOpen(true)}
+          onClick={() => navigate("/settings/about")}
           className="p-2 transition-colors border border-transparent rounded-full shadow-sm text-text-muted hover:text-accent-primary bg-bg-card/50 hover:bg-bg-card backdrop-blur-sm hover:border-accent-primary/20"
           title={t("settings.about.title")}
         >
