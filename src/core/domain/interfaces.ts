@@ -1,4 +1,4 @@
-import type { SelectorInfo, TestStep } from "../../commons/types";
+import type { CapturedElementPayload, TestStep } from "../../commons/types";
 
 /**
  * Domain Interfaces for RacTest Core
@@ -34,7 +34,7 @@ export interface IInspector {
   /**
    * Registers a callback for when an element is captured by the user
    */
-  onElementCaptured(callback: (info: SelectorInfo) => void): void;
+  onElementCaptured(callback: (info: CapturedElementPayload) => void): void;
 
   /**
    * Registers a callback for captured errors (passive monitoring)

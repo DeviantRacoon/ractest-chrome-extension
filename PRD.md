@@ -34,10 +34,12 @@ RacTest solves this by allowing users to capture, generate, edit, and execute te
 
 1. User creates a new flow (name + target URL).
 2. User captures DOM elements with the inspector.
-3. User configures actions (click, type, select, checkbox/radio) and delays.
-4. User reorders/edits steps.
-5. User runs the flow and monitors progress.
-6. User reviews execution details and logs in History.
+3. On capture, a quick in-page menu allows immediate step configuration (action, value if needed, delay) without switching to side panel.
+4. User saves capture directly from the page.
+5. User can still open advanced editing in the side panel when needed.
+6. User reorders/edits steps.
+7. User runs the flow and monitors progress.
+8. User reviews execution details and logs in History.
 
 ### 4.2 Generate Steps with AI (Flow Builder)
 
@@ -66,6 +68,11 @@ RacTest solves this by allowing users to capture, generate, edit, and execute te
 
 - Visual DOM highlighting on hover.
 - Element capture with robust selectors.
+- Quick Capture menu rendered in-page on click capture:
+  - Action selector: `CLICK`, `TYPE`, `SELECT`, `CHECK`, `UNCHECK`
+  - Value input shown for actions that require value (`TYPE`, `SELECT`)
+  - Delay input with sensible default from settings
+  - Save/Cancel controls with keyboard support (`Enter` save, `Esc` cancel)
 - Step configuration for supported actions:
   - `CLICK`
   - `TYPE`
@@ -119,6 +126,8 @@ RacTest solves this by allowing users to capture, generate, edit, and execute te
 
 - Safe handling of missing/changed selectors.
 - Consistent persistence and data recovery across browser restarts.
+- Capture flow must prevent incomplete required step data from being saved in quick menu mode.
+- Quick menu state must close safely on tab switches, URL changes, and inspector deactivation.
 
 ## 7. Technical Scope
 
@@ -134,6 +143,8 @@ RacTest solves this by allowing users to capture, generate, edit, and execute te
 3. AI-generated steps accepted without manual edits.
 4. Daily/weekly active users running at least one flow.
 5. Number of failed runs with actionable error diagnostics.
+6. Percentage of captured steps completed via Quick Capture without opening advanced editor.
+7. Capture-to-saved-step completion time (p50/p90).
 
 ## 9. Out of Scope (Current Release)
 

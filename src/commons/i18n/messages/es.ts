@@ -300,6 +300,9 @@ const es = {
   "stepEditor.title": "Pasos del flujo",
   "stepEditor.openUrl": "Abrir URL en nueva pestaña",
   "stepEditor.save": "Guardar",
+  "stepEditor.export.playwright": "Exportar a Playwright",
+  "stepEditor.export.success": "Script de Playwright exportado correctamente",
+  "stepEditor.export.error": "Error al exportar script de Playwright",
   "stepEditor.capture": "Capturar",
   "stepEditor.captureStop": "Detener Captura",
   "stepEditor.section": "Sección",
@@ -379,6 +382,15 @@ const es = {
   "stepEditor.toast.aiConnectError": "Error al conectar con la IA.",
   "stepEditor.toast.noApiKey":
     "Error: No se encontró la API Key. Configúrala en Ajustes.",
+  "inspector.exitHint": "Presiona ESC para salir",
+  "inspector.captureMenu.title": "Configurar paso",
+  "inspector.captureMenu.subtitle":
+    "Ajusta los detalles de la acción antes de guardar.",
+  "inspector.captureMenu.action": "Acción",
+  "inspector.captureMenu.value": "Valor",
+  "inspector.captureMenu.optionValue": "Valor de opción",
+  "inspector.captureMenu.error.valueRequired":
+    "Esta acción requiere un valor.",
 
   "execution.failedToast": "La ejecución falló: {{error}}",
   "execution.unknownError": "Error desconocido",

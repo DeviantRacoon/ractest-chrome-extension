@@ -1,5 +1,9 @@
 // Chrome Extension Message Types for Communication
-import type { SelectorInfo, StepExecutionResult, TestStep } from "./index";
+import type {
+  CapturedElementPayload,
+  StepExecutionResult,
+  TestStep,
+} from "./index";
 
 /**
  * Messages sent from popup to content script
@@ -60,7 +64,7 @@ export type ContentToPopupMessage =
     }
   | {
       type: "ELEMENT_CAPTURED";
-      payload: SelectorInfo;
+      payload: CapturedElementPayload;
     }
   | {
       type: "INSPECTOR_ERROR";

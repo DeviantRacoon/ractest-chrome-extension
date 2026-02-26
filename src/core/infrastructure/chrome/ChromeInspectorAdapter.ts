@@ -1,5 +1,5 @@
 import { inspectorService } from "../../../commons/lib/inspectorService";
-import type { SelectorInfo, TestStep } from "../../../commons/types";
+import type { CapturedElementPayload, TestStep } from "../../../commons/types";
 import type { IInspector } from "../../../core/domain/interfaces";
 
 export class ChromeInspectorAdapter implements IInspector {
@@ -25,7 +25,7 @@ export class ChromeInspectorAdapter implements IInspector {
     return inspectorService.executeStep(step);
   }
 
-  onElementCaptured(callback: (info: SelectorInfo) => void): void {
+  onElementCaptured(callback: (info: CapturedElementPayload) => void): void {
     inspectorService.onElementCaptured(callback);
   }
 

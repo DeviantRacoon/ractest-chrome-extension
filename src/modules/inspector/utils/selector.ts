@@ -88,6 +88,11 @@ export function generateSelector(element: HTMLElement): SelectorInfo {
     text: textInfo?.source === "content" ? textInfo.value : undefined,
   };
 
+  if (element instanceof HTMLInputElement) {
+    selectorInfo.inputType = (element.type || "").toLowerCase();
+    selectorInfo.checked = element.checked;
+  }
+
   // Store label info for custom xpath generation later if needed
   // (We don't have a specific field in SelectorInfo for "labelText" yet, so we'll encode it in the XPath)
 

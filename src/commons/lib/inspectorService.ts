@@ -3,7 +3,7 @@
  * Handles communication with content scripts to activate/deactivate inspector
  */
 
-import type { SelectorInfo, TestStep } from "../types";
+import type { CapturedElementPayload, SelectorInfo, TestStep } from "../types";
 import type {
   ContentToPopupMessage,
   PopupToContentMessage,
@@ -259,8 +259,9 @@ export class InspectorService {
     }
   }
 
-  private elementCapturedCallback: ((selector: SelectorInfo) => void) | null =
-    null;
+  private elementCapturedCallback:
+    | ((payload: CapturedElementPayload) => void)
+    | null = null;
   private errorCapturedCallback: ((error: any) => void) | null = null;
 
   constructor() {
@@ -272,7 +273,17 @@ export class InspectorService {
           message.type === "ELEMENT_CAPTURED" &&
           this.elementCapturedCallback
         ) {
-          this.elementCapturedCallback(message.payload);
+          const payload = message.payload as
+            | CapturedElementPayload
+            | SelectorInfo;
+          if ("selectorInfo" in payload) {
+            this.elementCapturedCallback(payload);
+          } else {
+            this.elementCapturedCallback({
+              selectorInfo: payload,
+              source: "classic",
+            });
+          }
         } else if (
           message.type === "CAPTURED_ERROR" &&
           this.errorCapturedCallback
@@ -290,7 +301,9 @@ export class InspectorService {
   /**
    * Listen for messages from content script
    */
-  public onElementCaptured(callback: (selector: SelectorInfo) => void): void {
+  public onElementCaptured(
+    callback: (payload: CapturedElementPayload) => void,
+  ): void {
     this.elementCapturedCallback = callback;
   }
 

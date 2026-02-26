@@ -13,9 +13,9 @@ export const useTestInspector = () => {
 
   useEffect(() => {
     // Listen for captured elements
-    inspectorService.onElementCaptured((selectorInfo) => {
-      console.log("Element captured:", selectorInfo);
-      setCapturedSelectors((prev) => [...prev, selectorInfo]);
+    inspectorService.onElementCaptured((payload) => {
+      console.log("Element captured:", payload);
+      setCapturedSelectors((prev) => [...prev, payload.selectorInfo]);
     });
   }, []);
 
