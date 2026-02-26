@@ -19,6 +19,7 @@ export interface TestProfile {
   name: string;
   url: string;
   steps: TestStep[];
+  enableFinalValidation?: boolean; // run final outcome validation after steps
   folderId?: string; // optional folder assignment
   createdAt: number;
   updatedAt: number;

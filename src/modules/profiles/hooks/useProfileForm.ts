@@ -14,6 +14,7 @@ export const useProfileForm = () => {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [folderId, setFolderId] = useState<string>("");
+  const [enableFinalValidation, setEnableFinalValidation] = useState(true);
   const [folders, setFolders] = useState<FlowFolder[]>([]);
   const [errors, setErrors] = useState<{ name?: string; url?: string }>({});
   const [isUrlHighlighted, setIsUrlHighlighted] = useState(false);
@@ -65,6 +66,7 @@ export const useProfileForm = () => {
         setName(profile.name);
         setUrl(profile.url);
         setFolderId(profile.folderId ?? "");
+        setEnableFinalValidation(profile.enableFinalValidation !== false);
       }
     } catch (error) {
       console.error("Error loading profile:", error);
@@ -124,6 +126,7 @@ export const useProfileForm = () => {
           name: name.trim(),
           url: url.trim(),
           folderId: folderIdValue,
+          enableFinalValidation,
         });
         navigate("/");
       } else {
@@ -132,6 +135,7 @@ export const useProfileForm = () => {
           name: name.trim(),
           url: url.trim(),
           folderId: folderIdValue,
+          enableFinalValidation,
           steps: [],
         });
         navigate(`/profile/${newProfile.id}/steps`);
@@ -152,6 +156,8 @@ export const useProfileForm = () => {
     setUrl,
     folderId,
     setFolderId,
+    enableFinalValidation,
+    setEnableFinalValidation,
     folders,
     errors,
     isUrlHighlighted,

@@ -372,10 +372,11 @@ body.ractest-inspecting * {
   box-shadow: 0 12px 24px rgba(2, 6, 23, 0.5);
 }
 .ractest-capture-menu .max-h-60 {
-  max-height: 15rem;
+  max-height: 10rem;
 }
 .ractest-capture-menu .overflow-auto {
   overflow: auto;
+  scrollbar-width: thin;
 }
 .ractest-capture-menu .text-sm {
   font-size: 0.875rem;
@@ -408,6 +409,9 @@ body.ractest-inspecting * {
   color: #94a3b8;
 }
 .ractest-capture-menu .text-text-muted {
+  color: #64748b;
+}
+.ractest-capture-menu .placeholder\:text-text-muted::placeholder {
   color: #64748b;
 }
 .ractest-capture-menu .text-accent-primary {
@@ -463,6 +467,12 @@ body.ractest-inspecting * {
 }
 .ractest-capture-menu .focus\:border-accent-primary:focus {
   border-color: var(--ractest-highlight);
+}
+.ractest-capture-menu .disabled\:opacity-50:disabled {
+  opacity: 0.5;
+}
+.ractest-capture-menu .disabled\:cursor-not-allowed:disabled {
+  cursor: not-allowed;
 }
 
 @media (prefers-reduced-motion: reduce) {

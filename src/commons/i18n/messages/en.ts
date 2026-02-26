@@ -283,6 +283,9 @@ const en = {
   "profile.urlHelper": "Initial page for the test",
   "profile.useCurrentUrl": "Use current URL",
   "profile.configuration": "Configuration",
+  "profile.finalValidation.label": "Enable final validation",
+  "profile.finalValidation.helper":
+    "When enabled, RacTest verifies final page outcome after executing all steps.",
   "profile.steps.title": "Flow steps",
   "profile.steps.desc": "Define and sort actions",
   "profile.steps.configure": "Configure",

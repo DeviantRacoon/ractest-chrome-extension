@@ -16,6 +16,8 @@ export const ProfileFormView: React.FC<ProfileFormViewProps> = ({
   setUrl,
   folderId,
   setFolderId,
+  enableFinalValidation,
+  setEnableFinalValidation,
   folders,
   errors,
   isUrlHighlighted,
@@ -136,6 +138,39 @@ export const ProfileFormView: React.FC<ProfileFormViewProps> = ({
                     className="bg-bg-card/50 border-border-default/50"
                     fullWidth
                   />
+                </div>
+
+                <div className="rounded-xl border border-border-default bg-bg-card/30 p-3">
+                  <div
+                    className="flex items-center gap-2 cursor-pointer group/toggle"
+                    onClick={() =>
+                      setEnableFinalValidation(!enableFinalValidation)
+                    }
+                  >
+                    <div
+                      className={`w-9 h-5 rounded-full relative transition-colors duration-200 ease-in-out flex-shrink-0 ${
+                        enableFinalValidation
+                          ? "bg-accent-primary"
+                          : "bg-bg-secondary border border-border-default hover:border-text-muted"
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
+                          enableFinalValidation
+                            ? "translate-x-4.5 left-0.5"
+                            : "left-0.5"
+                        }`}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm text-text-primary select-none">
+                        {t("profile.finalValidation.label")}
+                      </span>
+                      <span className="text-xs text-text-muted select-none">
+                        {t("profile.finalValidation.helper")}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

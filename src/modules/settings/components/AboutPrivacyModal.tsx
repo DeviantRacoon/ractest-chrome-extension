@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   Bug,
   ExternalLink,
   Github,
@@ -8,13 +9,9 @@ import {
   Shield,
 } from "lucide-react";
 import React from "react";
-import { Modal } from "../../../commons/components/ui";
+import { useNavigate } from "react-router-dom";
+import { Button } from "../../../commons/components/ui";
 import { useI18n } from "../../../commons/i18n";
-
-interface AboutPrivacyModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
 
 const GITHUB_REPO_URL =
   "https://github.com/DeviantRacoon/ractest-chrome-extension";
@@ -27,11 +24,9 @@ const buildMailtoLink = (subject: string, body: string) => {
   return `mailto:${CONTACT_EMAIL}?${params.toString()}`;
 };
 
-export const AboutPrivacyModal: React.FC<AboutPrivacyModalProps> = ({
-  isOpen,
-  onClose,
-}) => {
+export const AboutPrivacyView: React.FC = () => {
   const { t } = useI18n();
+  const navigate = useNavigate();
 
   const suggestionMailto = buildMailtoLink(
     "RacTest - Suggestion",
@@ -44,8 +39,24 @@ export const AboutPrivacyModal: React.FC<AboutPrivacyModalProps> = ({
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t("settings.about.title")}>
-      <div className="space-y-4">
+    <div className="flex flex-col h-full bg-bg-main">
+      <div className="sticky top-0 z-20 bg-bg-main/95 backdrop-blur supports-[backdrop-filter]:bg-bg-main/60 border-b border-border-default px-4 py-4 flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate("/settings")}
+          className="w-8 h-8 p-0 rounded-full hover:bg-bg-card -ml-2"
+        >
+          <ArrowLeft className="w-5 h-5 text-text-secondary" />
+        </Button>
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-text-primary">
+            {t("settings.about.title")}
+          </h1>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-20 space-y-4">
         <div className="flex flex-col items-center justify-center py-2">
           <img
             src="/logotipo.webp"
@@ -57,7 +68,7 @@ export const AboutPrivacyModal: React.FC<AboutPrivacyModalProps> = ({
           </p>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-3 max-w-2xl mx-auto">
           <div className="p-4 border bg-bg-main/50 rounded-xl border-border-default/50">
             <h3 className="flex items-center gap-2 mb-2 text-sm font-bold text-text-primary">
               <Globe className="w-4 h-4 text-accent-primary" />
@@ -143,16 +154,7 @@ export const AboutPrivacyModal: React.FC<AboutPrivacyModalProps> = ({
         <p className="text-xs text-center text-text-muted">
           {t("about.community")}
         </p>
-
-        <div className="flex justify-end mt-4">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium transition-colors border rounded-lg bg-bg-secondary text-text-primary hover:bg-bg-card border-border-default"
-          >
-            {t("about.close")}
-          </button>
-        </div>
       </div>
-    </Modal>
+    </div>
   );
 };
