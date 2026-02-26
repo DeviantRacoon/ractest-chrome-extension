@@ -11,9 +11,12 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useToast } from "../../../commons/components/ui";
 import { useI18n } from "../../../commons/i18n";
+import { downloadAsFile } from "../../../commons/lib/downloadUtils";
 import { inspectorService } from "../../../commons/lib/inspectorService";
+import { generatePlaywrightScript } from "../../../commons/lib/playwrightExporter";
 import storageService from "../../../commons/lib/storage";
 import type {
+  CapturedElementPayload,
   SelectorInfo,
   TestProfile,
   TestStep,
@@ -62,12 +65,12 @@ export const useStepEditor = () => {
   // Listen for captured elements from inspector
   useEffect(() => {
     // We need to manage the listener carefully to avoid duplicates or stale closures
-    const handleCapture = (selectorInfo: SelectorInfo) => {
-      handleElementCaptured(selectorInfo);
+    const handleCapture = (payload: CapturedElementPayload) => {
+      handleElementCaptured(payload);
     };
 
     inspectorService.onElementCaptured(handleCapture);
-  }, [steps, isRecording]); // dependency on steps and isRecording needed
+  }, [isRecording]);
 
   const loadProfile = async () => {
     if (!id) {
@@ -91,32 +94,51 @@ export const useStepEditor = () => {
     }
   };
 
-  const handleElementCaptured = (selectorInfo: SelectorInfo) => {
-    const bestSelector = getBestSelector(selectorInfo);
-
-    // Smart Action Detection
-    let action: "CLICK" | "TYPE" | "SELECT" = "CLICK";
+  const getFallbackAction = (selectorInfo: SelectorInfo): TestStep["action"] => {
     const tagName = selectorInfo.tagName.toLowerCase();
-
-    if (tagName === "input" || tagName === "textarea") {
-      // Check input type to avoid setting TYPE on checkbox/radio
-      // (This detail might need more info from selectorInfo if available,
-      // but for now generic input is a good guess for TYPE)
-      action = "TYPE";
-    } else if (tagName === "select") {
-      action = "SELECT";
+    if (tagName === "select") {
+      return "SELECT";
     }
+    if (tagName === "textarea") {
+      return "TYPE";
+    }
+    if (tagName === "input") {
+      const inputType = (selectorInfo.inputType || "").toLowerCase();
+      if (inputType === "checkbox" || inputType === "radio") {
+        return selectorInfo.checked ? "UNCHECK" : "CHECK";
+      }
+      return "TYPE";
+    }
+    return "CLICK";
+  };
+
+  const handleElementCaptured = (payload: CapturedElementPayload) => {
+    const selectorInfo = payload.selectorInfo;
+    const bestSelector = getBestSelector(selectorInfo);
+    const action = payload.stepDraft?.action ?? getFallbackAction(selectorInfo);
+    const defaultValue = payload.stepDraft?.value ?? "";
+    const defaultDelay = payload.stepDraft?.delay ?? 500;
+    const tagName = selectorInfo.tagName.toLowerCase();
 
     const newStep: TestStep = {
       id: crypto.randomUUID(),
       action: action,
       selector: bestSelector,
-      delay: 500,
-      order: steps.length + 1,
-      value: "", // Initialize value
+      delay: defaultDelay,
+      order: 1,
+      value: defaultValue,
+      uniqueText: payload.stepDraft?.uniqueText ?? false,
+      useFakeData: payload.stepDraft?.useFakeData ?? false,
+      fakeDataType: payload.stepDraft?.fakeDataType,
     };
 
-    setSteps((prev) => [...prev, newStep]);
+    setSteps((prev) => [
+      ...prev,
+      {
+        ...newStep,
+        order: prev.length + 1,
+      },
+    ]);
 
     if (isRecording) {
       // In recording mode, we don't deactivate
@@ -283,7 +305,6 @@ export const useStepEditor = () => {
     if (!validateSteps()) {
       return;
     }
-
     setSaving(true);
     try {
       const updatedProfile: TestProfile = {
@@ -299,6 +320,23 @@ export const useStepEditor = () => {
       error(t("stepEditor.toast.saveError"));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleExportPlaywright = async () => {
+    if (!profile) return;
+    try {
+      const allProfiles = await storageService.getProfiles();
+      const script = generatePlaywrightScript(
+        { ...profile, steps }, // Export current edited state
+        allProfiles,
+      );
+      const filename = `${profile.name.toLowerCase().replace(/\s+/g, "_")}.spec.ts`;
+      downloadAsFile(script, filename);
+      success(t("stepEditor.export.success"));
+    } catch (err) {
+      console.error("Failed to export Playwright script:", err);
+      error(t("stepEditor.export.error"));
     }
   };
 
@@ -450,6 +488,7 @@ export const useStepEditor = () => {
     handleStepHighlight,
     handleDragEnd,
     handleSave,
+    handleExportPlaywright,
     handleAddDivider,
     handleAddRecipe,
     navigate,

@@ -295,6 +295,9 @@ const en = {
   "stepEditor.title": "Flow steps",
   "stepEditor.openUrl": "Open URL in new tab",
   "stepEditor.save": "Save",
+  "stepEditor.export.playwright": "Export to Playwright",
+  "stepEditor.export.success": "Playwright script exported successfully",
+  "stepEditor.export.error": "Failed to export Playwright script",
   "stepEditor.capture": "Capture",
   "stepEditor.captureStop": "Stop Capture",
   "stepEditor.section": "Section",
@@ -373,6 +376,14 @@ const en = {
   "stepEditor.toast.aiConnectError": "Error connecting to AI.",
   "stepEditor.toast.noApiKey":
     "Error: API Key not found. Configure it in Settings.",
+  "inspector.exitHint": "Press ESC to exit",
+  "inspector.captureMenu.title": "Configure step",
+  "inspector.captureMenu.subtitle": "Adjust action details before saving.",
+  "inspector.captureMenu.action": "Action",
+  "inspector.captureMenu.value": "Value",
+  "inspector.captureMenu.optionValue": "Option value",
+  "inspector.captureMenu.error.valueRequired":
+    "This action requires a value.",
 
   "execution.failedToast": "Execution failed: {{error}}",
   "execution.unknownError": "Unknown error",

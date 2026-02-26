@@ -116,6 +116,25 @@ export interface SelectorInfo {
   xpath?: string; // generated XPath
   tagName: string; // HTML tag name
   text?: string; // visible text content
+  inputType?: string; // input[type] when available
+  checked?: boolean; // current checked state for checkbox/radio
+}
+
+export type CaptureAction = "CLICK" | "TYPE" | "SELECT" | "CHECK" | "UNCHECK";
+
+export interface CaptureStepDraft {
+  action: CaptureAction;
+  value?: string;
+  delay: number;
+  uniqueText?: boolean;
+  useFakeData?: boolean;
+  fakeDataType?: FakeDataType;
+}
+
+export interface CapturedElementPayload {
+  selectorInfo: SelectorInfo;
+  stepDraft?: CaptureStepDraft;
+  source: "quick_menu" | "classic";
 }
 
 /**

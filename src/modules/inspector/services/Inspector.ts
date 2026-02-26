@@ -6,10 +6,12 @@
 import type { ContentToPopupMessage } from "../../../commons/types/messages";
 import { OverlaySystem } from "../components/OverlaySystem";
 import { generateSelector, getBestSelector } from "../utils/selector";
+import type { CaptureAction, CaptureStepDraft } from "../../../commons/types";
 
 export class Inspector {
   private overlay: OverlaySystem;
   private isActive = false;
+  private defaultDelay = 500;
 
   constructor() {
     this.overlay = new OverlaySystem();
@@ -27,6 +29,9 @@ export class Inspector {
     // Load settings and apply highlight color
     chrome.storage.local.get(["ractest_settings"], (result) => {
       const settings = result.ractest_settings as any;
+      if (typeof settings?.defaultDelay === "number") {
+        this.defaultDelay = settings.defaultDelay;
+      }
       if (settings && settings.highlightColor) {
         this.overlay.setHighlightColor(settings.highlightColor);
       }
@@ -148,10 +153,6 @@ export class Inspector {
   private handleClick = (event: MouseEvent): void => {
     if (!this.isActive) return;
 
-    // Prevent default action
-    event.preventDefault();
-    event.stopPropagation();
-
     const target = event.target as HTMLElement;
 
     // Ignore RacTest's own elements
@@ -159,19 +160,40 @@ export class Inspector {
       return;
     }
 
+    // Prevent default action
+    event.preventDefault();
+    event.stopPropagation();
+
     // Generate selector info
     const selectorInfo = generateSelector(target);
 
-    // Show capture confirmation
-    this.overlay.showCaptureConfirmation();
+    const defaultAction = this.getDefaultAction(target);
+    const bestSelector = getBestSelector(selectorInfo);
 
-    // Send to popup
-    this.sendMessage({
-      type: "ELEMENT_CAPTURED",
-      payload: selectorInfo,
+    this.overlay.showCaptureMenu({
+      x: event.clientX,
+      y: event.clientY,
+      defaultAction,
+      defaultDelay: this.defaultDelay,
+      onSave: (stepDraft: CaptureStepDraft) => {
+        this.overlay.showCaptureConfirmation();
+        this.sendMessage({
+          type: "ELEMENT_CAPTURED",
+          payload: {
+            selectorInfo,
+            stepDraft,
+            source: "quick_menu",
+          },
+        });
+        console.log("[RacTest] Element captured with menu:", {
+          selector: bestSelector,
+          stepDraft,
+        });
+      },
+      onCancel: () => {
+        console.log("[RacTest] Capture cancelled from menu");
+      },
     });
-
-    console.log("[RacTest] Element captured:", selectorInfo);
 
     // Optionally deactivate after capture
     // this.deactivate();
@@ -183,6 +205,10 @@ export class Inspector {
     // Exit on ESC key
     if (event.key === "Escape") {
       event.preventDefault();
+      if (this.overlay.isCaptureMenuOpen()) {
+        this.overlay.hideCaptureMenu();
+        return;
+      }
       this.deactivate();
     }
   };
@@ -194,11 +220,21 @@ export class Inspector {
   }
 
   private isRacTestElement(element: HTMLElement): boolean {
-    return (
-      element.id?.startsWith("ractest-") ||
-      element.className?.toString().includes("ractest-") ||
-      false
-    );
+    if (element.closest('[id^="ractest-"]')) {
+      return true;
+    }
+
+    let current: HTMLElement | null = element;
+    while (current) {
+      for (const className of Array.from(current.classList)) {
+        if (className.startsWith("ractest-") && className !== "ractest-inspecting") {
+          return true;
+        }
+      }
+      current = current.parentElement;
+    }
+
+    return false;
   }
 
   private handleStorageChange = (
@@ -207,11 +243,43 @@ export class Inspector {
   ) => {
     if (areaName === "local" && changes.ractest_settings) {
       const newSettings = changes.ractest_settings.newValue as any;
+      if (typeof newSettings?.defaultDelay === "number") {
+        this.defaultDelay = newSettings.defaultDelay;
+      }
       if (newSettings && newSettings.highlightColor) {
         this.overlay.setHighlightColor(newSettings.highlightColor);
       }
     }
   };
+
+  private getDefaultAction(target: HTMLElement): CaptureAction {
+    const tagName = target.tagName.toLowerCase();
+    if (target instanceof HTMLSelectElement || tagName === "select") {
+      return "SELECT";
+    }
+    if (target instanceof HTMLTextAreaElement || tagName === "textarea") {
+      return "TYPE";
+    }
+    if (target instanceof HTMLInputElement || tagName === "input") {
+      const input = target as HTMLInputElement;
+      const inputType = (input.type || "").toLowerCase();
+      if (inputType === "checkbox" || inputType === "radio") {
+        return input.checked ? "UNCHECK" : "CHECK";
+      }
+      if (
+        inputType === "text" ||
+        inputType === "email" ||
+        inputType === "password" ||
+        inputType === "search" ||
+        inputType === "tel" ||
+        inputType === "url" ||
+        inputType === "number"
+      ) {
+        return "TYPE";
+      }
+    }
+    return "CLICK";
+  }
 
   private sendMessage(message: ContentToPopupMessage): void {
     try {

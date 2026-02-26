@@ -3,16 +3,49 @@
  * Creates visual feedback for element inspection
  */
 
+import {
+  CheckSquare,
+  List,
+  MousePointerClick,
+  Square,
+  Type,
+} from "lucide-react";
+import React from "react";
+import { createRoot, type Root } from "react-dom/client";
+import type { SelectOption } from "../../../commons/components/ui/Select";
+import { Select } from "../../../commons/components/ui/Select";
+import overlayStyles from "./OverlaySystem.css?inline";
+import type {
+  AppLanguage,
+  AppLanguagePreference,
+  CaptureAction,
+  CaptureStepDraft,
+  FakeDataType,
+} from "../../../commons/types";
+
+import en from "../../../commons/i18n/messages/en";
+import es from "../../../commons/i18n/messages/es";
+import storageService from "../../../commons/lib/storage";
+
 const OVERLAY_ID = "ractest-inspector-overlay";
 const TOOLTIP_ID = "ractest-inspector-tooltip";
 const EXIT_BUTTON_ID = "ractest-exit-inspector";
+const CAPTURE_MENU_ID = "ractest-capture-menu";
 
 export class OverlaySystem {
   private overlay: HTMLDivElement | null = null;
   private tooltip: HTMLDivElement | null = null;
   private exitButton: HTMLDivElement | null = null;
+  private captureMenu: HTMLDivElement | null = null;
+  private actionSelectRoot: Root | null = null;
+  private fakeTypeSelectRoot: Root | null = null;
   private isActive = false;
   private highlightColor = "#10B981"; // Default emerald-500
+  private language: AppLanguage = "en";
+  private readonly dictionaries: Record<AppLanguage, Record<string, string>> = {
+    en: en as Record<string, string>,
+    es: es as Record<string, string>,
+  };
 
   /**
    * Set the highlight color
@@ -20,7 +53,7 @@ export class OverlaySystem {
   public setHighlightColor(color: string): void {
     this.highlightColor = color;
     if (this.isActive) {
-      this.updateStyles();
+      this.applyHighlightVariables();
     }
   }
 
@@ -34,7 +67,9 @@ export class OverlaySystem {
     this.createTooltip();
     this.createExitButton();
     this.injectStyles();
+    this.applyHighlightVariables();
     this.isActive = true;
+    void this.syncLanguage();
 
     // Add inspecting class to body
     document.body.classList.add("ractest-inspecting");
@@ -49,11 +84,13 @@ export class OverlaySystem {
     this.overlay?.remove();
     this.tooltip?.remove();
     this.exitButton?.remove();
+    this.captureMenu?.remove();
     this.removeStyles();
 
     this.overlay = null;
     this.tooltip = null;
     this.exitButton = null;
+    this.captureMenu = null;
     this.isActive = false;
 
     // Remove inspecting class from body
@@ -92,7 +129,8 @@ export class OverlaySystem {
 
     const rect = element.getBoundingClientRect();
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    const scrollLeft =
+      window.pageXOffset || document.documentElement.scrollLeft;
 
     this.overlay.style.top = `${rect.top + scrollTop}px`;
     this.overlay.style.left = `${rect.left + scrollLeft}px`;
@@ -125,6 +163,354 @@ export class OverlaySystem {
     if (this.tooltip) {
       this.tooltip.style.display = "none";
     }
+  }
+
+  public isCaptureMenuOpen(): boolean {
+    return !!this.captureMenu;
+  }
+
+  public hideCaptureMenu(): void {
+    this.actionSelectRoot?.unmount();
+    this.fakeTypeSelectRoot?.unmount();
+    this.actionSelectRoot = null;
+    this.fakeTypeSelectRoot = null;
+    this.captureMenu?.remove();
+    this.captureMenu = null;
+  }
+
+  public async showCaptureMenu(params: {
+    x: number;
+    y: number;
+    defaultAction: CaptureAction;
+    defaultValue?: string;
+    defaultDelay: number;
+    onSave: (draft: CaptureStepDraft) => void;
+    onCancel: () => void;
+  }): Promise<void> {
+    await this.syncLanguage();
+    this.hideCaptureMenu();
+    const fakeDataOptions: FakeDataType[] = [
+      "name",
+      "firstName",
+      "lastName",
+      "email",
+      "username",
+      "password",
+      "phone",
+      "address",
+      "city",
+      "state",
+      "zipCode",
+      "country",
+      "company",
+      "jobTitle",
+      "url",
+      "date",
+      "time",
+      "datetime",
+      "number",
+      "price",
+      "uuid",
+      "color",
+      "lorem",
+    ];
+    const copy = {
+      title: this.t("inspector.captureMenu.title", "Configure step"),
+      subtitle: this.t(
+        "inspector.captureMenu.subtitle",
+        "Adjust action details before saving.",
+      ),
+      action: this.t("inspector.captureMenu.action", "Action"),
+      value: this.t("inspector.captureMenu.value", "Value"),
+      optionValue: this.t("inspector.captureMenu.optionValue", "Option value"),
+      uniqueText: this.t(
+        "stepEditor.stepCard.uniqueText",
+        "Unique text (append UUID)",
+      ),
+      useFakeData: this.t("stepEditor.stepCard.useFakeData", "Use fake data"),
+      fakeDataType: this.t(
+        "stepEditor.stepCard.fakeDataType",
+        "Fake data type",
+      ),
+      delay: this.t("stepEditor.stepCard.delay", "Delay (ms)"),
+      cancel: this.t("settings.confirmReset.cancel", "Cancel"),
+      save: this.t("settings.save", "Save"),
+      requiredValueError: this.t(
+        "inspector.captureMenu.error.valueRequired",
+        "This action requires a value.",
+      ),
+      click: this.t("stepEditor.action.CLICK", "Click"),
+      type: this.t("stepEditor.action.TYPE", "Type"),
+      select: this.t("stepEditor.action.SELECT", "Select"),
+      check: this.t("stepEditor.action.CHECK", "Check"),
+      uncheck: this.t("stepEditor.action.UNCHECK", "Uncheck"),
+    };
+    let selectedAction: CaptureAction = params.defaultAction;
+    let selectedFakeDataType: FakeDataType = "name";
+
+    const menu = document.createElement("div");
+    menu.id = CAPTURE_MENU_ID;
+    menu.className = "ractest-capture-menu";
+    menu.innerHTML = `
+      <div class="ractest-capture-menu-title">${copy.title}</div>
+      <div class="ractest-capture-menu-subtitle">${copy.subtitle}</div>
+      <label class="ractest-capture-menu-label" for="ractest-capture-action">${copy.action}</label>
+      <div id="ractest-capture-action-react" class="ractest-react-select"></div>
+      <div id="ractest-capture-value-wrap">
+        <label class="ractest-capture-menu-label" id="ractest-capture-value-label" for="ractest-capture-value">${copy.value}</label>
+        <input id="ractest-capture-value" class="ractest-capture-menu-field" type="text" />
+      </div>
+      <div id="ractest-capture-type-options" class="ractest-toggle-group">
+        <label class="ractest-switch">
+          <input id="ractest-capture-unique" type="checkbox" />
+          <span class="ractest-switch-track"><span class="ractest-switch-thumb"></span></span>
+          <span class="ractest-switch-label">${copy.uniqueText}</span>
+        </label>
+        <label class="ractest-switch">
+          <input id="ractest-capture-fake" type="checkbox" />
+          <span class="ractest-switch-track"><span class="ractest-switch-thumb"></span></span>
+          <span class="ractest-switch-label">${copy.useFakeData}</span>
+        </label>
+      </div>
+      <div id="ractest-capture-fake-type-wrap">
+        <label class="ractest-capture-menu-label" for="ractest-capture-fake-type">${copy.fakeDataType}</label>
+        <div id="ractest-capture-fake-type-react" class="ractest-react-select"></div>
+      </div>
+      <label class="ractest-capture-menu-label" for="ractest-capture-delay">${copy.delay}</label>
+      <input id="ractest-capture-delay" class="ractest-capture-menu-field" type="number" min="0" step="100" />
+      <div id="ractest-capture-error" class="ractest-capture-menu-error"></div>
+      <div class="ractest-capture-menu-actions">
+        <button type="button" id="ractest-capture-cancel" class="ractest-capture-btn ractest-capture-btn-secondary">
+          <span class="ractest-capture-btn-icon" aria-hidden="true">${this.cancelIcon()}</span>
+          <span>${copy.cancel}</span>
+        </button>
+        <button type="button" id="ractest-capture-save" class="ractest-capture-btn ractest-capture-btn-primary">
+          <span class="ractest-capture-btn-icon" aria-hidden="true">${this.saveIcon()}</span>
+          <span>${copy.save}</span>
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(menu);
+    this.captureMenu = menu;
+
+    const actionSelectMount = menu.querySelector(
+      "#ractest-capture-action-react",
+    ) as HTMLDivElement | null;
+    const valueWrap = menu.querySelector(
+      "#ractest-capture-value-wrap",
+    ) as HTMLDivElement | null;
+    const valueLabel = menu.querySelector(
+      "#ractest-capture-value-label",
+    ) as HTMLLabelElement | null;
+    const valueInput = menu.querySelector(
+      "#ractest-capture-value",
+    ) as HTMLInputElement | null;
+    const typeOptions = menu.querySelector(
+      "#ractest-capture-type-options",
+    ) as HTMLDivElement | null;
+    const uniqueTextCheckbox = menu.querySelector(
+      "#ractest-capture-unique",
+    ) as HTMLInputElement | null;
+    const fakeDataCheckbox = menu.querySelector(
+      "#ractest-capture-fake",
+    ) as HTMLInputElement | null;
+    const fakeTypeWrap = menu.querySelector(
+      "#ractest-capture-fake-type-wrap",
+    ) as HTMLDivElement | null;
+    const fakeTypeSelectMount = menu.querySelector(
+      "#ractest-capture-fake-type-react",
+    ) as HTMLDivElement | null;
+    const delayInput = menu.querySelector(
+      "#ractest-capture-delay",
+    ) as HTMLInputElement | null;
+    const errorText = menu.querySelector(
+      "#ractest-capture-error",
+    ) as HTMLDivElement | null;
+    const saveButton = menu.querySelector(
+      "#ractest-capture-save",
+    ) as HTMLButtonElement | null;
+    const cancelButton = menu.querySelector(
+      "#ractest-capture-cancel",
+    ) as HTMLButtonElement | null;
+
+    if (
+      !actionSelectMount ||
+      !valueWrap ||
+      !valueLabel ||
+      !valueInput ||
+      !typeOptions ||
+      !uniqueTextCheckbox ||
+      !fakeDataCheckbox ||
+      !fakeTypeWrap ||
+      !fakeTypeSelectMount ||
+      !delayInput ||
+      !errorText ||
+      !saveButton ||
+      !cancelButton
+    ) {
+      this.hideCaptureMenu();
+      params.onCancel();
+      return;
+    }
+
+    const actionOptions: SelectOption[] = [
+      {
+        value: "CLICK",
+        label: copy.click,
+        icon: React.createElement(MousePointerClick, { className: "w-4 h-4" }),
+      },
+      {
+        value: "TYPE",
+        label: copy.type,
+        icon: React.createElement(Type, { className: "w-4 h-4" }),
+      },
+      {
+        value: "SELECT",
+        label: copy.select,
+        icon: React.createElement(List, { className: "w-4 h-4" }),
+      },
+      {
+        value: "CHECK",
+        label: copy.check,
+        icon: React.createElement(CheckSquare, { className: "w-4 h-4" }),
+      },
+      {
+        value: "UNCHECK",
+        label: copy.uncheck,
+        icon: React.createElement(Square, { className: "w-4 h-4" }),
+      },
+    ];
+
+    const fakeDataTypeOptions: SelectOption[] = fakeDataOptions.map((item) => ({
+      value: item,
+      label: this.getFakeDataLabel(item),
+    }));
+
+    this.actionSelectRoot = createRoot(actionSelectMount);
+    this.fakeTypeSelectRoot = createRoot(fakeTypeSelectMount);
+
+    const renderActionSelect = () => {
+      this.actionSelectRoot?.render(
+        React.createElement(Select, {
+          value: selectedAction,
+          onChange: (value: string) => {
+            setSelectedAction(value as CaptureAction);
+            updateVisibility();
+          },
+          options: actionOptions,
+          fullWidth: true,
+        }),
+      );
+    };
+
+    const renderFakeTypeSelect = () => {
+      this.fakeTypeSelectRoot?.render(
+        React.createElement(Select, {
+          value: selectedFakeDataType,
+          onChange: (value: string) => {
+            selectedFakeDataType = value as FakeDataType;
+          },
+          options: fakeDataTypeOptions,
+          fullWidth: true,
+        }),
+      );
+    };
+
+    const setSelectedAction = (action: CaptureAction) => {
+      selectedAction = action;
+      renderActionSelect();
+    };
+
+    setSelectedAction(params.defaultAction);
+    renderFakeTypeSelect();
+
+    valueInput.value = params.defaultValue || "";
+    delayInput.value = String(params.defaultDelay);
+    selectedFakeDataType = "name";
+
+    const updateVisibility = () => {
+      const action = selectedAction;
+      const isType = action === "TYPE";
+      const isSelect = action === "SELECT";
+      const needsValue = isType || isSelect;
+      const useFakeData = isType && fakeDataCheckbox.checked;
+      valueWrap.style.display = needsValue ? "block" : "none";
+      typeOptions.style.display = isType ? "grid" : "none";
+      fakeTypeWrap.style.display = useFakeData ? "block" : "none";
+      valueLabel.textContent = isSelect ? copy.optionValue : copy.value;
+      valueInput.disabled = useFakeData;
+      errorText.textContent = "";
+    };
+
+    updateVisibility();
+    fakeDataCheckbox.addEventListener("change", updateVisibility);
+
+    const closeAndCancel = () => {
+      this.hideCaptureMenu();
+      params.onCancel();
+    };
+
+    cancelButton.addEventListener("click", closeAndCancel);
+
+    saveButton.addEventListener("click", () => {
+      const action = selectedAction;
+      const isType = action === "TYPE";
+      const needsValue = isType || action === "SELECT";
+      const useFakeData = isType && fakeDataCheckbox.checked;
+      const value = valueInput.value.trim();
+      const delay = Math.max(0, parseInt(delayInput.value || "0", 10) || 0);
+
+      if (needsValue && !useFakeData && !value) {
+        errorText.textContent = copy.requiredValueError;
+        valueInput.focus();
+        return;
+      }
+
+      this.hideCaptureMenu();
+      params.onSave({
+        action,
+        value: needsValue && !useFakeData ? value : "",
+        delay,
+        uniqueText: isType ? uniqueTextCheckbox.checked : false,
+        useFakeData,
+        fakeDataType: useFakeData ? selectedFakeDataType : undefined,
+      });
+    });
+
+    menu.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeAndCancel();
+      } else if (event.key === "Enter") {
+        if (document.activeElement !== cancelButton) {
+          event.preventDefault();
+          saveButton.click();
+        }
+      }
+    });
+
+    const menuRect = menu.getBoundingClientRect();
+    const padding = 12;
+    const left = Math.min(
+      Math.max(params.x + 12, padding),
+      window.innerWidth - menuRect.width - padding,
+    );
+    const top = Math.min(
+      Math.max(params.y + 12, padding),
+      window.innerHeight - menuRect.height - padding,
+    );
+
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+  }
+
+  private cancelIcon(): string {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M18 6 6 18"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="m6 6 12 12"/></svg>';
+  }
+
+  private saveIcon(): string {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="m20 6-11 11-5-5"/></svg>';
   }
 
   /**
@@ -182,9 +568,62 @@ export class OverlaySystem {
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
       </svg>
-      <span>ESC para salir</span>
+      <span>${this.t("inspector.exitHint", "Press ESC to exit")}</span>
     `;
     document.body.appendChild(this.exitButton);
+  }
+
+  private async syncLanguage(): Promise<void> {
+    this.language = await this.resolveLanguage();
+    const label = this.exitButton?.querySelector("span");
+    if (label) {
+      label.textContent = this.t("inspector.exitHint", "Press ESC to exit");
+    }
+  }
+
+  private async resolveLanguage(): Promise<AppLanguage> {
+    try {
+      const settings = await storageService.getSettings();
+      const preference = settings.language ?? "en";
+      return this.normalizeLanguagePreference(preference);
+    } catch {
+      return this.detectSystemLanguage();
+    }
+  }
+
+  private normalizeLanguagePreference(
+    preference: AppLanguagePreference,
+  ): AppLanguage {
+    if (preference === "auto") {
+      return this.detectSystemLanguage();
+    }
+    return this.normalizeLanguage(preference);
+  }
+
+  private detectSystemLanguage(): AppLanguage {
+    if (typeof chrome !== "undefined" && chrome.i18n?.getUILanguage) {
+      return this.normalizeLanguage(chrome.i18n.getUILanguage());
+    }
+    if (typeof navigator !== "undefined") {
+      return this.normalizeLanguage(navigator.language);
+    }
+    return "en";
+  }
+
+  private normalizeLanguage(value?: string | null): AppLanguage {
+    if (!value) return "en";
+    const lower = value.toLowerCase();
+    if (lower.startsWith("es")) return "es";
+    return "en";
+  }
+
+  private t(key: string, fallback: string): string {
+    const dictionary = this.dictionaries[this.language] ?? this.dictionaries.en;
+    return dictionary[key] ?? this.dictionaries.en[key] ?? fallback;
+  }
+
+  private getFakeDataLabel(type: FakeDataType): string {
+    return this.t(`fakeData.option.${type}`, type);
   }
 
   private injectStyles(): void {
@@ -193,94 +632,20 @@ export class OverlaySystem {
 
     const style = document.createElement("style");
     style.id = styleId;
-    style.textContent = this.getStyles();
+    style.textContent = overlayStyles;
     document.head.appendChild(style);
   }
 
-  private updateStyles(): void {
-    const style = document.getElementById("ractest-inspector-styles");
-    if (style) {
-      style.textContent = this.getStyles();
-    }
-  }
-
-  private getStyles(): string {
-    return `
-      @keyframes ractest-pulse {
-        0% { box-shadow: 0 0 0 0 ${this.hexToRgba(this.highlightColor, 0.7)}; }
-        70% { box-shadow: 0 0 0 10px ${this.hexToRgba(this.highlightColor, 0)}; }
-        100% { box-shadow: 0 0 0 0 ${this.hexToRgba(this.highlightColor, 0)}; }
-      }
-
-      .ractest-overlay {
-        position: absolute;
-        border: 2px solid ${this.highlightColor};
-        background: ${this.hexToRgba(this.highlightColor, 0.2)};
-        pointer-events: none;
-        z-index: 999998;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        box-sizing: border-box;
-        border-radius: 4px;
-        animation: ractest-pulse 2s infinite;
-      }
-
-
-      .ractest-tooltip {
-        position: absolute;
-        background: #0F172A;
-        color: ${this.highlightColor};
-        padding: 6px 12px;
-        font-size: 12px;
-        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-        border-radius: 4px;
-        pointer-events: none;
-        z-index: 999999;
-        white-space: nowrap;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        max-width: 400px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .ractest-exit-button {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #EF4444;
-        color: white;
-        padding: 10px 16px;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        z-index: 1000000;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
-        transition: all 0.2s ease;
-      }
-
-      .ractest-exit-button:hover {
-        background: #DC2626;
-        transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(239, 68, 68, 0.5);
-      }
-
-      .ractest-exit-button svg {
-        width: 16px;
-        height: 16px;
-      }
-
-      body.ractest-inspecting,
-      body.ractest-inspecting * {
-        cursor: crosshair !important;
-      }
-
-      .ractest-exit-button * {
-        cursor: pointer !important;
-      }
-    `;
+  private applyHighlightVariables(): void {
+    document.documentElement.style.setProperty(
+      "--ractest-highlight",
+      this.highlightColor,
+    );
+    const [r, g, b] = this.hexToRgbTuple(this.highlightColor);
+    document.documentElement.style.setProperty(
+      "--ractest-highlight-rgb",
+      `${r}, ${g}, ${b}`,
+    );
   }
 
   private hexToRgba(hex: string, alpha: number): string {
@@ -293,5 +658,15 @@ export class OverlaySystem {
   private removeStyles(): void {
     const style = document.getElementById("ractest-inspector-styles");
     style?.remove();
+    document.documentElement.style.removeProperty("--ractest-highlight");
+    document.documentElement.style.removeProperty("--ractest-highlight-rgb");
+  }
+
+  private hexToRgbTuple(hex: string): [number, number, number] {
+    return [
+      parseInt(hex.slice(1, 3), 16),
+      parseInt(hex.slice(3, 5), 16),
+      parseInt(hex.slice(5, 7), 16),
+    ];
   }
 }
