@@ -200,6 +200,9 @@ export const StepEditorView: React.FC<StepEditorViewProps> = ({
             {isInspectorActive
               ? t("stepEditor.captureStop")
               : t("stepEditor.capture")}
+            <kbd className="ml-2 inline-flex items-center justify-center text-[10px] font-semibold font-mono px-1.5 py-0.5 rounded bg-bg-secondary/80 text-text-muted border border-border-default/50 leading-none">
+              ⇧C
+            </kbd>
           </Button>
 
           <Button

@@ -295,10 +295,10 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
                         }`}
                       >
                         <div
-                          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
+                          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
                             step.uniqueText
-                              ? "translate-x-4.5 left-0.5"
-                              : "left-0.5"
+                              ? "translate-x-[18px]"
+                              : ""
                           }`}
                         />
                       </div>
@@ -322,10 +322,10 @@ export const StepConfigCard: React.FC<StepConfigCardProps> = ({
                         }`}
                       >
                         <div
-                          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
+                          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-in-out ${
                             step.useFakeData
-                              ? "translate-x-4.5 left-0.5"
-                              : "left-0.5"
+                              ? "translate-x-[18px]"
+                              : ""
                           }`}
                         />
                       </div>

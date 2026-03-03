@@ -8,6 +8,11 @@ import { OverlaySystem } from "../components/OverlaySystem";
 import { generateSelector, getBestSelector } from "../utils/selector";
 import type { CaptureAction, CaptureStepDraft } from "../../../commons/types";
 
+interface SelectOptionPair {
+  label: string;
+  value: string;
+}
+
 export class Inspector {
   private overlay: OverlaySystem;
   private isActive = false;
@@ -174,6 +179,12 @@ export class Inspector {
       x: event.clientX,
       y: event.clientY,
       defaultAction,
+      defaultValue:
+        defaultAction === "SELECT"
+          ? this.getDefaultSelectValue(target)
+          : undefined,
+      selectOptions:
+        defaultAction === "SELECT" ? this.getSelectOptions(target) : [],
       defaultDelay: this.defaultDelay,
       onSave: (stepDraft: CaptureStepDraft) => {
         this.overlay.showCaptureConfirmation();
@@ -279,6 +290,31 @@ export class Inspector {
       }
     }
     return "CLICK";
+  }
+
+  private getSelectElement(target: HTMLElement): HTMLSelectElement | null {
+    if (target instanceof HTMLSelectElement) return target;
+    const fromTagName =
+      target.tagName.toLowerCase() === "select"
+        ? (target as HTMLSelectElement)
+        : null;
+    if (fromTagName) return fromTagName;
+    return target.closest("select");
+  }
+
+  private getDefaultSelectValue(target: HTMLElement): string {
+    const select = this.getSelectElement(target);
+    return select?.value ?? "";
+  }
+
+  private getSelectOptions(target: HTMLElement): SelectOptionPair[] {
+    const select = this.getSelectElement(target);
+    if (!select) return [];
+
+    return Array.from(select.options).map((option) => ({
+      label: option.textContent?.trim() || option.label || "(empty label)",
+      value: option.value ?? "",
+    }));
   }
 
   private sendMessage(message: ContentToPopupMessage): void {

@@ -11,6 +11,7 @@ export const useSequenceForm = () => {
   const { success, error } = useToast();
 
   const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
   const [sequence, setSequence] = useState<
     Array<{ id: string; recipeId: string }>
   >([]);
@@ -36,6 +37,13 @@ export const useSequenceForm = () => {
 
   const handleAddRecipeClick = () => {
     if (!selectedRecipeId) return;
+    // Auto-populate URL from first recipe added if empty
+    if (!url.trim() && sequence.length === 0) {
+      const recipe = availableRecipes.find((r) => r.id === selectedRecipeId);
+      if (recipe?.url) {
+        setUrl(recipe.url);
+      }
+    }
     setSequence((prev) => [
       ...prev,
       { id: crypto.randomUUID(), recipeId: selectedRecipeId },
@@ -76,7 +84,7 @@ export const useSequenceForm = () => {
 
       await storageService.saveProfile({
         name: name.trim(),
-        url: "Secuencia Combinada", // Placeholder URL
+        url: url.trim() || availableRecipes.find((r) => r.id === sequence[0]?.recipeId)?.url || "",
         steps: newSteps,
       });
 
@@ -100,6 +108,8 @@ export const useSequenceForm = () => {
     t,
     name,
     setName,
+    url,
+    setUrl,
     sequence,
     loading,
     sortedRecipes,
