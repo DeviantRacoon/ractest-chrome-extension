@@ -57,6 +57,28 @@ export const useStepEditor = () => {
   const [isRecording, setIsRecording] = useState(false);
   const { success, error } = useToast();
 
+  // Keyboard shortcut: press "C" to toggle capture
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore when typing in inputs, textareas, selects, or contenteditable
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (
+        tag === "input" ||
+        tag === "textarea" ||
+        tag === "select" ||
+        (e.target as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+      if (e.key === "C" && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        handleCaptureSingle();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isInspectorActive, isRecording]);
+
   // Load profile and steps
   useEffect(() => {
     loadProfile();

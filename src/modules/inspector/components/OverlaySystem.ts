@@ -28,6 +28,11 @@ import en from "../../../commons/i18n/messages/en";
 import es from "../../../commons/i18n/messages/es";
 import storageService from "../../../commons/lib/storage";
 
+interface SelectOptionPair {
+  label: string;
+  value: string;
+}
+
 const OVERLAY_ID = "ractest-inspector-overlay";
 const TOOLTIP_ID = "ractest-inspector-tooltip";
 const EXIT_BUTTON_ID = "ractest-exit-inspector";
@@ -195,6 +200,7 @@ export class OverlaySystem {
     y: number;
     defaultAction: CaptureAction;
     defaultValue?: string;
+    selectOptions?: SelectOptionPair[];
     defaultDelay: number;
     onSave: (draft: CaptureStepDraft) => void;
     onCancel: () => void;
@@ -235,6 +241,14 @@ export class OverlaySystem {
       action: this.t("inspector.captureMenu.action", "Action"),
       value: this.t("inspector.captureMenu.value", "Value"),
       optionValue: this.t("inspector.captureMenu.optionValue", "Option value"),
+      selectOptionsTitle: this.t(
+        "inspector.captureMenu.selectOptionsTitle",
+        "Available options (label | value)",
+      ),
+      noSelectOptions: this.t(
+        "inspector.captureMenu.noSelectOptions",
+        "No options found for this select.",
+      ),
       uniqueText: this.t(
         "stepEditor.stepCard.uniqueText",
         "Unique text (append UUID)",
@@ -271,6 +285,10 @@ export class OverlaySystem {
       <div id="ractest-capture-value-wrap">
         <label class="ractest-capture-menu-label" id="ractest-capture-value-label" for="ractest-capture-value">${copy.value}</label>
         <div id="ractest-capture-value-react"></div>
+        <div id="ractest-capture-select-options" class="ractest-select-options">
+          <div class="ractest-select-options-title">${copy.selectOptionsTitle}</div>
+          <div id="ractest-capture-select-options-list" class="ractest-select-options-list"></div>
+        </div>
       </div>
       <div id="ractest-capture-type-options" class="ractest-toggle-group">
         <label class="ractest-switch">
@@ -299,30 +317,46 @@ export class OverlaySystem {
         <button type="button" id="ractest-capture-save" class="ractest-capture-btn ractest-capture-btn-primary">
           <span class="ractest-capture-btn-icon" aria-hidden="true">${this.saveIcon()}</span>
           <span>${copy.save}</span>
+          <kbd class="ractest-capture-btn-kbd">⏎</kbd>
         </button>
       </div>
     `;
 
+    // Position with visibility hidden first so we can measure before showing
+    menu.style.visibility = "hidden";
     document.body.appendChild(menu);
     this.captureMenu = menu;
 
     const repositionMenu = () => {
       const padding = 12;
-      menu.style.maxHeight = `${Math.max(280, window.innerHeight - padding * 2)}px`;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      menu.style.maxHeight = `${Math.max(280, vh - padding * 2)}px`;
       menu.style.overflowY = "auto";
 
       const menuRect = menu.getBoundingClientRect();
-      const left = Math.min(
-        Math.max(params.x + 12, padding),
-        window.innerWidth - menuRect.width - padding,
-      );
-      const top = Math.min(
-        Math.max(params.y + 12, padding),
-        window.innerHeight - menuRect.height - padding,
-      );
+      const menuW = menuRect.width;
+      const menuH = menuRect.height;
+
+      // Horizontal: prefer right of click, flip left if overflow
+      let left = params.x + 12;
+      if (left + menuW + padding > vw) {
+        left = Math.max(padding, params.x - menuW - 12);
+      }
+      left = Math.max(padding, Math.min(left, vw - menuW - padding));
+
+      // Vertical: prefer below click, flip above if overflow
+      let top = params.y + 12;
+      if (top + menuH + padding > vh) {
+        top = Math.max(padding, params.y - menuH - 12);
+      }
+      top = Math.max(padding, Math.min(top, vh - menuH - padding));
 
       menu.style.left = `${left}px`;
       menu.style.top = `${top}px`;
+
+      // Reveal after positioning
+      menu.style.visibility = "visible";
     };
 
     this.repositionMenuListener = repositionMenu;
@@ -340,6 +374,12 @@ export class OverlaySystem {
     const valueLabel = menu.querySelector(
       "#ractest-capture-value-label",
     ) as HTMLLabelElement | null;
+    const selectOptionsWrap = menu.querySelector(
+      "#ractest-capture-select-options",
+    ) as HTMLDivElement | null;
+    const selectOptionsList = menu.querySelector(
+      "#ractest-capture-select-options-list",
+    ) as HTMLDivElement | null;
     const typeOptions = menu.querySelector(
       "#ractest-capture-type-options",
     ) as HTMLDivElement | null;
@@ -373,6 +413,8 @@ export class OverlaySystem {
       !valueWrap ||
       !valueInputMount ||
       !valueLabel ||
+      !selectOptionsWrap ||
+      !selectOptionsList ||
       !typeOptions ||
       !uniqueTextCheckbox ||
       !fakeDataCheckbox ||
@@ -487,6 +529,29 @@ export class OverlaySystem {
     renderValueInput();
     renderDelayInput();
     selectedFakeDataType = "name";
+    const selectOptions = params.selectOptions ?? [];
+    if (selectOptions.length > 0) {
+      for (const option of selectOptions) {
+        const row = document.createElement("div");
+        row.className = "ractest-select-option-item";
+
+        const labelSpan = document.createElement("span");
+        labelSpan.className = "ractest-select-option-label";
+        labelSpan.textContent = option.label;
+
+        const valueSpan = document.createElement("span");
+        valueSpan.className = "ractest-select-option-value";
+        valueSpan.textContent = option.value;
+
+        row.append(labelSpan, valueSpan);
+        selectOptionsList.appendChild(row);
+      }
+    } else {
+      const empty = document.createElement("div");
+      empty.className = "ractest-select-option-empty";
+      empty.textContent = copy.noSelectOptions;
+      selectOptionsList.appendChild(empty);
+    }
 
     const updateVisibility = () => {
       const action = selectedAction;
@@ -495,6 +560,7 @@ export class OverlaySystem {
       const needsValue = isType || isSelect;
       const useFakeData = isType && fakeDataCheckbox.checked;
       valueWrap.style.display = needsValue ? "block" : "none";
+      selectOptionsWrap.style.display = isSelect ? "block" : "none";
       typeOptions.style.display = isType ? "grid" : "none";
       fakeTypeWrap.style.display = useFakeData ? "block" : "none";
       valueLabel.textContent = isSelect ? copy.optionValue : copy.value;

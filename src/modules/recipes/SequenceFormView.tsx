@@ -5,7 +5,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowLeft, GripVertical, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Globe, GripVertical, Plus, Save, Trash2 } from "lucide-react";
 import React from "react";
 import { Button, Input, Select } from "../../commons/components/ui";
 import { useSequenceForm } from "./hooks/useSequenceForm";
@@ -83,6 +83,8 @@ export const SequenceFormView: React.FC<SequenceFormViewProps> = ({
   t,
   name,
   setName,
+  url,
+  setUrl,
   sequence,
   loading,
   sortedRecipes,
@@ -140,6 +142,21 @@ export const SequenceFormView: React.FC<SequenceFormViewProps> = ({
               onChange={(e) => setName(e.target.value)}
               placeholder={t("sequence.new.namePlaceholder")}
               fullWidth
+            />
+          </div>
+
+          {/* URL Section */}
+          <div>
+            <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
+              {t("sequence.new.urlLabel")}
+            </label>
+            <Input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder={t("sequence.new.urlPlaceholder")}
+              leftIcon={<Globe className="w-4 h-4" />}
+              fullWidth
+              helperText={t("sequence.new.urlHelper")}
             />
           </div>
 
