@@ -93,7 +93,7 @@ export const SettingsView: React.FC<SettingsViewProps> = (settingsProps) => {
             className="object-contain w-auto h-12 transition-opacity duration-300 opacity-90 hover:opacity-100"
           />
           <p className="mt-2 text-xs font-medium text-text-muted">
-            {t("settings.version", { version: "1.5.0" })}
+            {t("settings.version", { version: "2.0.0" })}
           </p>
         </div>
 
